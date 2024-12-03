@@ -106,6 +106,11 @@ class Game:
                         if self.is_passable(new_x, new_y):
                             selected_unit.move(dx, dy)
 
+                            # Vérifie si l'unité entre dans une zone d'eau
+                            if self.terrain_map[new_y][new_x].terrain_type == "water":
+                                print("L'unité a touché de l'eau ! Retour au menu.")
+                                return False  # Quitter le jeu et retourner au menu
+
                         if event.key == pygame.K_SPACE:
                             for enemy in self.enemy_units:
                                 if abs(selected_unit.x - enemy.x) <= 1 and abs(selected_unit.y - enemy.y) <= 1:
@@ -114,6 +119,7 @@ class Game:
                                         self.enemy_units.remove(enemy)
                             has_acted = True
                             selected_unit.is_selected = False
+        return True
 
     def handle_enemy_turn(self):
         """ Gère le tour des ennemis """
@@ -179,13 +185,14 @@ def display_main_menu(screen):
 # Fonction principale
 def main():
     pygame.init()
-    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))  # Définit la taille de la fenêtre
     pygame.display.set_caption("Mon jeu de stratégie")
 
     if display_main_menu(screen):  # Affiche le menu principal et vérifie si "Start Game" a été sélectionné
         game = Game(screen)
         while True:
-            game.handle_player_turn()
+            if not game.handle_player_turn():
+                display_main_menu(screen)  # Retour au menu si le joueur touche l'eau
             game.handle_enemy_turn()
 
 if __name__ == "__main__":
