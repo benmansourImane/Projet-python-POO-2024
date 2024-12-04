@@ -9,10 +9,15 @@ FPS = 30  # Nombre d'images par seconde
 BLACK = (0, 0, 0)  # Couleur noire pour le fond
 WHITE = (255, 255, 255)  # Couleur blanche
 GREEN = (0, 255, 0)  # Couleur verte pour le texte
+RED = (255, 0, 0)  # Couleur rouge pour la barre de vie
 
 class Game:
     def __init__(self, screen):
         self.screen = screen
+        self.score = 0  # Score initial
+        self.font = pygame.font.Font(None, 36)
+        self.score_font = pygame.font.Font(None, 24)
+        self.enemy_eliminated = False  # Nouveau drapeau pour suivre l'état
 
         # Crée la carte du terrain avec des cellules normales
         self.terrain_map = [[Terrain(x, y, "normal") for x in range(GRID_SIZE)] for y in range(GRID_SIZE)]
@@ -74,9 +79,28 @@ class Game:
                 self.terrain_map[y][x].draw(self.screen)
         for unit in self.player_units + self.enemy_units:
             unit.draw(self.screen)
+        
+        # Affichage de la barre de vie et du score
+        self.display_score_and_health_bar()
+
         pygame.display.flip()
 
-    # Fonction pour gérer le tour du joueur
+    def display_score_and_health_bar(self):
+        # Affichage du score
+        score_text = self.score_font.render(f"Score: {self.score}", True, WHITE)
+        self.screen.blit(score_text, (10, 10))
+
+        # Affichage de la barre de vie
+        health_bar_width = 200
+        health_bar_height = 20
+        pygame.draw.rect(self.screen, RED, (10, 40, health_bar_width, health_bar_height))
+        # Normaliser le score pour qu'il ne dépasse pas 30
+        normalized_score = min(self.score, 30)
+        pygame.draw.rect(self.screen, GREEN, (10, 40, int(normalized_score * health_bar_width / 30), health_bar_height))
+
+
+
+
     def handle_player_turn(self):
         for selected_unit in self.player_units:
             has_acted = False
@@ -109,7 +133,20 @@ class Game:
                             # Vérifie si l'unité entre dans une zone d'eau
                             if self.terrain_map[new_y][new_x].terrain_type == "water":
                                 print("L'unité a touché de l'eau ! Retour au menu.")
-                                return False  # Quitter le jeu et retourner au menu
+                                return "menu"  # Signaler qu'il faut retourner au menu
+
+                            if self.terrain_map[new_y][new_x].terrain_type == "fire":
+                                if self.score < 30:  # Vérifie que le score est en dessous de 30
+                                    self.score += 1  # Incrémente le score
+
+                                    # Vérifie si le score a atteint le maximum
+                                    if self.score == 30 and not self.enemy_eliminated:
+                                        if self.enemy_units:  # Vérifie s'il reste des ennemis
+                                            eliminated_enemy = self.enemy_units.pop(0)  # Élimine le premier ennemi
+                                            print(f"L'ennemi à la position ({eliminated_enemy.x}, {eliminated_enemy.y}) a été éliminé !")
+                                            self.enemy_eliminated = True  # Marque qu'un ennemi a été éliminé
+                                    elif self.score > 30:
+                                        self.score = 30  # S'assure que le score ne dépasse pas 30
 
                         if event.key == pygame.K_SPACE:
                             for enemy in self.enemy_units:
@@ -120,6 +157,7 @@ class Game:
                             has_acted = True
                             selected_unit.is_selected = False
         return True
+
 
     def handle_enemy_turn(self):
         """ Gère le tour des ennemis """
@@ -168,31 +206,40 @@ def display_main_menu(screen):
                 exit()
 
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP:  # Flèche vers le haut
-                    selected_item = (selected_item - 1) % len(menu_items)
-                elif event.key == pygame.K_DOWN:  # Flèche vers le bas
-                    selected_item = (selected_item + 1) % len(menu_items)
-                elif event.key == pygame.K_RETURN:  # Entrée pour sélectionner
-                    if menu_items[selected_item] == "Start Game":
-                        return True  # Démarre le jeu
-                    elif menu_items[selected_item] == "Exit":
+                if event.key == pygame.K_DOWN:
+                    selected_item = (selected_item + 1) % len(menu_items)  # Descendre dans les options
+                elif event.key == pygame.K_UP:
+                    selected_item = (selected_item - 1) % len(menu_items)  # Monter dans les options
+                elif event.key == pygame.K_RETURN:
+                    if selected_item == 0:
+                        return  # Lancer le jeu
+                    elif selected_item == 1:
+                        pass  # Paramètres (non implémenté ici)
+                    elif selected_item == 2:
                         pygame.quit()
-                        exit()  # Quitte le jeu
-                    elif menu_items[selected_item] == "Settings":
-                        print("Settings option selected (not implemented).")
+                        exit()
+
+        clock.tick(FPS)  # Limite à 30 images par seconde
 
 
-# Fonction principale
 def main():
     pygame.init()
-    screen = pygame.display.set_mode((WIDTH, HEIGHT))  # Définit la taille de la fenêtre
-    pygame.display.set_caption("Mon jeu de stratégie")
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("Game")
 
-    if display_main_menu(screen):  # Affiche le menu principal et vérifie si "Start Game" a été sélectionné
-        game = Game(screen)
-        while True:
-            if not game.handle_player_turn():
-                display_main_menu(screen)  # Retour au menu si le joueur touche l'eau
+    game = Game(screen)
+
+    # Affichage du menu principal
+    display_main_menu(screen)
+
+    # Boucle principale du jeu
+    running = True
+    while running:
+        result = game.handle_player_turn()
+        if result == "menu":
+            display_main_menu(screen)  # Retour au menu principal
+            game = Game(screen)  # Réinitialisation du jeu
+        else:
             game.handle_enemy_turn()
 
 if __name__ == "__main__":
