@@ -1,7 +1,7 @@
 import pygame
 
 # Constantes du jeu
-GRID_SIZE = 16  # Taille de la grille
+GRID_SIZE = 20  # Taille de la grille
 CELL_SIZE = 60  # Taille des cellules
 
 # Couleurs des terrains (utilisées par défaut pour les terrains sans image)
