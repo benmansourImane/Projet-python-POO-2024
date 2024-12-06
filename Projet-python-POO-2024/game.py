@@ -1,12 +1,13 @@
+
 import pygame
 import random
 from unit import Unit, Terrain, GRID_SIZE, CELL_SIZE
 from special_units import StrongUnit, WeakUnit
 
-# Constantes du jeu
-WIDTH = GRID_SIZE * CELL_SIZE  # Largeur de l'écran
-HEIGHT = GRID_SIZE * CELL_SIZE  # Hauteur de l'écran
-FPS = 30  # Nombre d'images par seconde
+# 常量
+WIDTH = GRID_SIZE * CELL_SIZE
+HEIGHT = GRID_SIZE * CELL_SIZE
+FPS = 30
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 GREEN = (0, 255, 0)
@@ -15,33 +16,32 @@ RED = (255, 0, 0)
 class Game:
     def __init__(self, screen):
         self.screen = screen
-        self.score = 0  # Score initial
+        self.score = 0
         self.font = pygame.font.Font(None, 36)
         self.score_font = pygame.font.Font(None, 24)
-        self.enemy_eliminated = False  # Nouveau drapeau pour suivre l'état
+        self.enemy_eliminated = False
 
-        # Crée la carte du terrain
+        # 创建地图
         self.terrain_map = [[Terrain(x, y, "normal") for x in range(GRID_SIZE)] for y in range(GRID_SIZE)]
         self.generate_walls()
         self.generate_water()
         self.generate_mud()
         self.generate_fire()
 
-          # Unités du joueur et de l'ennemi
-        # Création des unités pour l'équipe Joueur
+        # 玩家单位
         self.player_units = [
-            StrongUnit(0, 0, "player"),  # Joueur fort
-            StrongUnit(0, 1, "player"),  # Joueur fort
-            WeakUnit(1, 0, "player"),    # Joueur faible
-            WeakUnit(1, 1, "player")     # Joueur faible
+            StrongUnit(0, 0, "player"),
+            StrongUnit(0, 1, "player"),
+            WeakUnit(1, 0, "player"),
+            WeakUnit(1, 1, "player")
         ]
 
-        # Création des unités pour l'équipe Ennemi
+        # 敌人单位 (右下角生成)
         self.enemy_units = [
-            StrongUnit(6, 6, "enemy"),   # Ennemi fort
-            StrongUnit(6, 7, "enemy"),   # Ennemi fort
-            WeakUnit(7, 6, "enemy"),     # Ennemi faible
-            WeakUnit(7, 7, "enemy")      # Ennemi faible
+            StrongUnit(GRID_SIZE - 2, GRID_SIZE - 2, "enemy"),
+            StrongUnit(GRID_SIZE - 2, GRID_SIZE - 3, "enemy"),
+            WeakUnit(GRID_SIZE - 3, GRID_SIZE - 2, "enemy"),
+            WeakUnit(GRID_SIZE - 3, GRID_SIZE - 3, "enemy")
         ]
 
         self.selected_unit = None
@@ -76,31 +76,44 @@ class Game:
         terrain = self.terrain_map[y][x]
         return terrain.terrain_type != "wall"
 
+    def is_tile_visible(self, x, y):
+        """
+        判断某格是否在玩家单位的可见范围内。
+        """
+        for unit in self.player_units:
+            if abs(unit.x - x) <= 5 and abs(unit.y - y) <= 5:
+                return True
+        return False
+
     def flip_display(self):
+        """
+        刷新屏幕并应用战争迷雾。
+        """
         self.screen.fill(BLACK)
         for y in range(GRID_SIZE):
             for x in range(GRID_SIZE):
-                self.terrain_map[y][x].draw(self.screen)
+                visible = self.is_tile_visible(x, y)
+                # 调用 draw 方法时，传递 screen 和 visible 参数
+                self.terrain_map[y][x].draw(self.screen, visible)
+
+        # 绘制单位（仅在可见范围内）
         for unit in self.player_units + self.enemy_units:
-            unit.draw(self.screen)
-        # Affichage de la barre de vie et du score
+            if self.is_tile_visible(unit.x, unit.y):
+                unit.draw(self.screen)
+
         self.display_score_and_health_bar()
         pygame.display.flip()
 
 
-    # Fonction pour gérer le tour du joueur
     def display_score_and_health_bar(self):
-        # Affichage du score
         score_text = self.score_font.render(f"Score: {self.score}", True, WHITE)
         self.screen.blit(score_text, (10, 10))
-        # Affichage de la barre de vie
+
         health_bar_width = 200
         health_bar_height = 20
         pygame.draw.rect(self.screen, RED, (10, 40, health_bar_width, health_bar_height))
-        # Normaliser le score pour qu'il ne dépasse pas 30
         normalized_score = min(self.score, 30)
         pygame.draw.rect(self.screen, GREEN, (10, 40, int(normalized_score * health_bar_width / 30), health_bar_height))
-
 
     def handle_player_turn(self):
         for selected_unit in self.player_units:
@@ -127,24 +140,6 @@ class Game:
 
                         new_x, new_y = selected_unit.x + dx, selected_unit.y + dy
 
-                        # Vérifie si l'unité essaie de bouger vers de l'eau
-                        if self.terrain_map[new_y][new_x].terrain_type == "water":
-                            self.display_game_over("Vous avez perdu !")
-                            pygame.quit()
-                            exit()
-                        if self.terrain_map[new_y][new_x].terrain_type == "fire":
-                            if self.score < 30:  # Vérifie que le score est en dessous de 30
-                                self.score += 1  # Incrémente le score
-                                # Vérifie si le score a atteint le maximum
-                                if self.score == 30 and not self.enemy_eliminated:
-                                     if self.enemy_units:  # Vérifie s'il reste des ennemis
-                                            eliminated_enemy = self.enemy_units.pop(0)  # Élimine le premier ennemi
-                                            print(f"L'ennemi à la position ({eliminated_enemy.x}, {eliminated_enemy.y}) a été éliminé !")
-                                            self.enemy_eliminated = True  # Marque qu'un ennemi a été éliminé
-                                elif self.score > 30:
-                                    self.score = 30  # S'assure que le score ne dépasse pas 30   
-
-                        # Vérifie si la case est praticable
                         if self.is_passable(new_x, new_y):
                             selected_unit.move(dx, dy)
 
@@ -157,17 +152,6 @@ class Game:
                             has_acted = True
                             selected_unit.is_selected = False
         return True
-
-    def display_game_over(self, message):
-        font = pygame.font.Font(None, 74)
-        text = font.render(message, True, RED)
-        self.screen.fill(BLACK)
-        self.screen.blit(text, (WIDTH // 2 - text.get_width() // 2, HEIGHT // 2 - text.get_height() // 2))
-        pygame.display.flip()
-        pygame.time.wait(3000)  # Affiche le message pendant 3 secondes
-
-
-    
 
     def handle_enemy_turn(self):
         for enemy in self.enemy_units:
@@ -184,59 +168,15 @@ class Game:
                 if target.health <= 0:
                     self.player_units.remove(target)
 
-
-# Fonction pour afficher le menu principal avec navigation
-def display_main_menu(screen):
-    font = pygame.font.Font(None, 74)  # Police pour le titre
-    small_font = pygame.font.Font(None, 50)  # Police pour les options
-    clock = pygame.time.Clock()
-
-    # Charger l'image de fond
-    background = pygame.image.load("assets/background.png")  # Remplacez par le nom de votre image
-    background = pygame.transform.scale(background, (WIDTH, HEIGHT))  # Adapter la taille de l'image à l'écran
-
-    # Liste des options du menu
-    menu_items = ["Start Game", "Settings", "Exit"]
-    selected_item = 0  # Option sélectionnée au début (Start Game)
-
-    while True:
-        screen.blit(background, (0, 0))  # Afficher l'image de fond
-        title = font.render("Main Menu", True, GREEN)  # Titre "Main Menu" en vert
-        screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 100))
-
-        # Affichage des options du menu avec surlignage de l'option sélectionnée
-        for i, item in enumerate(menu_items):
-            color = WHITE if i != selected_item else (0, 255, 0)  # Surligne l'option sélectionnée
-            option_text = small_font.render(f"{i+1}. {item}", True, color)
-            screen.blit(option_text, (WIDTH // 2 - option_text.get_width() // 2, 250 + i * 100))
-
-        pygame.display.flip()  # Rafraîchit l'écran
-
-        # Gestion des événements de navigation et de sélection
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                exit()
-
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP:  # Flèche vers le haut
-                    selected_item = (selected_item - 1) % len(menu_items)
-                elif event.key == pygame.K_DOWN:  # Flèche vers le bas
-                    selected_item = (selected_item + 1) % len(menu_items)
-                elif event.key == pygame.K_RETURN:  # Entrée pour sélectionner
-                    if menu_items[selected_item] == "Start Game":
-                        return True 
 def main():
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("Mon jeu de stratégie")
-
-    if display_main_menu(screen):
-        game = Game(screen)
-        while True:
-            if not game.handle_player_turn():
-                display_main_menu(screen)
-            game.handle_enemy_turn()
+    pygame.display.set_caption("策略游戏")
+    game = Game(screen)
+    while True:
+        if not game.handle_player_turn():
+            break
+        game.handle_enemy_turn()
 
 if __name__ == "__main__":
     main()
