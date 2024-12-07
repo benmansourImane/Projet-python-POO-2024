@@ -63,6 +63,28 @@ def start_menu(screen):
 
     return selected_option
 
+def draw_skill_menu(screen, unit, menu_position):
+    """
+    绘制技能菜单。
+    :param screen: Pygame 屏幕
+    :param unit: 当前选中的单位
+    :param menu_position: 菜单的屏幕坐标
+    """
+    font = pygame.font.Font(None, 36)
+    options = ["1. Heal", "2. Area Attack", "3. Single Attack"]
+    menu_width, menu_height = 200, len(options) * 40
+    menu_x, menu_y = menu_position
+
+    # 绘制背景
+    pygame.draw.rect(screen, (200, 200, 200), (menu_x, menu_y, menu_width, menu_height))
+    pygame.draw.rect(screen, (0, 0, 0), (menu_x, menu_y, menu_width, menu_height), 2)
+
+    # 绘制选项
+    for i, option in enumerate(options):
+        text = font.render(option, True, (0, 0, 0))
+        screen.blit(text, (menu_x + 10, menu_y + i * 40 + 10))
+
+
 
 
 class Game:
@@ -186,10 +208,13 @@ class Game:
         pygame.draw.rect(self.screen, GREEN, (10, 40, int(normalized_score * health_bar_width / 30), health_bar_height))
 
     def handle_player_turn(self):
+        """
+        玩家回合处理逻辑，包括移动、攻击和使用技能。
+        """
         for selected_unit in self.player_units:
             has_acted = False
-            selected_unit.is_selected = True
-            self.flip_display()
+            selected_unit.is_selected = True  # 标记选中的单位
+            self.flip_display()  # 刷新显示以突出选中单位
 
             while not has_acted:
                 for event in pygame.event.get():
@@ -197,6 +222,7 @@ class Game:
                         pygame.quit()
                         exit()
 
+                    # 方向键移动单位
                     if event.type == pygame.KEYDOWN:
                         dx, dy = 0, 0
                         if event.key == pygame.K_LEFT:
@@ -209,21 +235,44 @@ class Game:
                             dy = 1
 
                         new_x, new_y = selected_unit.x + dx, selected_unit.y + dy
-
                         if self.is_passable(new_x, new_y):
                             selected_unit.move(dx, dy)
+                            has_acted = True  # 移动结束后标记为已行动
+                            break
 
-                        if event.key == pygame.K_SPACE:
-                            for enemy in self.enemy_units:
-                                if abs(selected_unit.x - enemy.x) <= 1 and abs(selected_unit.y - enemy.y) <= 1:
-                                    selected_unit.attack(enemy)
-                                    if enemy.health <= 0:
-                                        self.enemy_units.remove(enemy)
-                            has_acted = True
-                            selected_unit.is_selected = False
-        # 执行火焰地形扣血
+                    # 右键打开技能菜单
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+                        mouse_x, mouse_y = pygame.mouse.get_pos()
+                        draw_skill_menu(self.screen, selected_unit, (mouse_x, mouse_y))
+                        pygame.display.flip()
+
+                        # 处理技能菜单中的选择
+                        while True:
+                            for sub_event in pygame.event.get():
+                                if sub_event.type == pygame.MOUSEBUTTONDOWN and sub_event.button == 1:  # 左键选择
+                                    menu_x, menu_y = mouse_x, mouse_y
+                                    option_index = (sub_event.pos[1] - menu_y) // 40  # 菜单项索引
+                                    if option_index == 0:  # 治疗
+                                        selected_unit.heal()
+                                    elif option_index == 1:  # 范围攻击
+                                        selected_unit.area_attack(self.enemy_units)
+                                    elif option_index == 2:  # 单体攻击
+                                        selected_unit.single_attack(self.enemy_units)
+                                    has_acted = True  # 使用技能后标记为已行动
+                                    break
+                                elif sub_event.type == pygame.KEYDOWN and sub_event.key == pygame.K_ESCAPE:  # 取消
+                                    has_acted = True  # 退出菜单时标记为已行动
+                                    break
+                            if has_acted:
+                                break
+
+            # 操作完成后取消单位的选中状态
+            selected_unit.is_selected = False
+
+        # 执行火焰地形扣血逻辑
         self.apply_fire_damage()
         return True
+
 
     def handle_enemy_turn(self):
         for enemy in self.enemy_units:
