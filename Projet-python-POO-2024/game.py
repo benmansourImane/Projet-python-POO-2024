@@ -13,6 +13,58 @@ WHITE = (255, 255, 255)
 GREEN = (0, 255, 0)
 RED = (255, 0, 0)
 
+
+
+def start_menu(screen):
+    """
+    显示游戏开始菜单。
+    """
+    # 加载背景图片
+    background_image = pygame.image.load("assets/background.png")
+    background_image = pygame.transform.scale(background_image, (WIDTH, HEIGHT))
+
+    # 设置字体
+    font = pygame.font.Font(None, 74)
+    option_font = pygame.font.Font(None, 50)
+
+    menu_running = True
+    selected_option = 0  # 0 表示 Game，1 表示 Settings
+
+    while menu_running:
+        # 绘制背景和标题
+        screen.blit(background_image, (0, 0))
+        title_text = font.render("Python game", True, WHITE)
+        screen.blit(title_text, (WIDTH // 2 - title_text.get_width() // 2, 100))
+
+        # 绘制菜单选项
+        options = ["1.Game", "2.Settings"]
+        for i, option in enumerate(options):
+            color = GREEN if i == selected_option else WHITE
+            option_text = option_font.render(option, True, color)
+            screen.blit(option_text, (WIDTH // 2 - option_text.get_width() // 2, 250 + i * 60))
+
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP:
+                    selected_option = (selected_option - 1) % len(options)
+                elif event.key == pygame.K_DOWN:
+                    selected_option = (selected_option + 1) % len(options)
+                elif event.key == pygame.K_RETURN:
+                    if selected_option == 0:  # 选择 Game
+                        menu_running = False
+                    elif selected_option == 1:  # 选择 Settings（目前未实现）
+                        print("设置菜单尚未实现。")
+
+    return selected_option
+
+
+
 class Game:
     def __init__(self, screen):
         self.screen = screen
@@ -45,6 +97,24 @@ class Game:
         ]
 
         self.selected_unit = None
+
+    def apply_fire_damage(self):
+        """
+        对处于火焰地形上的单位扣除 1 点血量。
+        """
+        for unit in self.player_units + self.enemy_units:
+            terrain = self.terrain_map[unit.y][unit.x]  # 获取单位当前所在地形
+            if terrain.terrain_type == "fire":  # 判断是否为火焰地形
+                unit.health -= 1  # 扣除 1 点血量
+                print(f"{unit.team} unit at ({unit.x}, {unit.y}) took 1 fire damage. Health: {unit.health}")
+                if unit.health <= 0:  # 检查单位是否死亡
+                    if unit in self.player_units:
+                        self.player_units.remove(unit)
+                        print(f"Player unit at ({unit.x}, {unit.y}) has died.")
+                    elif unit in self.enemy_units:
+                        self.enemy_units.remove(unit)
+                        print(f"Enemy unit at ({unit.x}, {unit.y}) has died.")
+
 
     def generate_walls(self):
         for _ in range(9):
@@ -151,6 +221,8 @@ class Game:
                                         self.enemy_units.remove(enemy)
                             has_acted = True
                             selected_unit.is_selected = False
+        # 执行火焰地形扣血
+        self.apply_fire_damage()
         return True
 
     def handle_enemy_turn(self):
@@ -171,12 +243,20 @@ class Game:
 def main():
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("策略游戏")
-    game = Game(screen)
-    while True:
-        if not game.handle_player_turn():
-            break
-        game.handle_enemy_turn()
+    pygame.display.set_caption("Python Game")
+
+    # 显示开始菜单
+    selected_option = start_menu(screen)
+    if selected_option == 0:  # 开始游戏
+        game = Game(screen)
+        while True:
+            if not game.handle_player_turn():
+                break
+            game.handle_enemy_turn()
+    elif selected_option == 1:  # 设置菜单
+        # 暂时仅打印消息
+        print("设置菜单尚未实现。")
+
 
 if __name__ == "__main__":
     main()

@@ -66,6 +66,43 @@ class Unit:
         self.team = team
         self.attack_range = attack_range
         self.is_selected = False  # 默认未选中
+    
+    def draw(self, screen):
+        """
+        绘制单位及其血量条。
+        """
+        # 绘制单位
+        color = (0, 0, 255) if self.team == 'player' else (255, 0, 0)  # 玩家单位为蓝色，敌人单位为红色
+        if self.is_selected:
+            pygame.draw.rect(screen, (0, 255, 0),  # 选中时用绿色框突出显示
+                             (self.x * CELL_SIZE, self.y * CELL_SIZE, CELL_SIZE, CELL_SIZE), 3)
+        pygame.draw.circle(screen, color, (self.x * CELL_SIZE + CELL_SIZE // 2, self.y * CELL_SIZE + CELL_SIZE // 2), CELL_SIZE // 3)
+
+        # 绘制血量条
+        self.draw_health_bar(screen)
+
+    def draw_health_bar(self, screen):
+        """
+        绘制血量条。
+        """
+        # 血量条的宽度和高度
+        bar_width = CELL_SIZE * 0.8
+        bar_height = 5
+
+        # 计算血量比例
+        health_ratio = max(self.health, 0) / 20  # 假设最大生命值为 20，调整比例可根据单位类型灵活变化
+
+        # 血量条的位置
+        bar_x = self.x * CELL_SIZE + (CELL_SIZE - bar_width) / 2
+        bar_y = self.y * CELL_SIZE - 10  # 血量条放在单位图标的上方
+
+        # 绘制黑色背景条（已损失的生命值）
+        pygame.draw.rect(screen, (0, 0, 0), (bar_x, bar_y, bar_width, bar_height))
+
+        # 绘制红色前景条（剩余生命值）
+        pygame.draw.rect(screen, (255, 0, 0), (bar_x, bar_y, bar_width * health_ratio, bar_height))
+
+        
 
     def move(self, dx, dy):
         """
