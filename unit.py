@@ -96,6 +96,8 @@ class Unit:
             return False
         """移动单位并处理地形效果"""
         new_x, new_y = self.x + dx, self.y + dy
+
+
         # 检查目标是否在地图边界内
         if not (0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE):
             return False
@@ -113,6 +115,11 @@ class Unit:
 
         # 移动到新位置
         self.x, self.y = new_x, new_y
+
+        # 更新隐身状态
+        self.is_hidden = terrain_type == "tree" and isinstance(self, (Sniper, Scout))
+        
+        
 
         # 处理岩浆效果
         if terrain_type == "lava":
@@ -188,6 +195,8 @@ class Unit:
         """Affiche l'unité sur l'écran.
         在屏幕上绘制单位。"""
     
+        
+        
         """绘制单位，并根据隐身状态调整透明度"""
         if game:
             terrain_type = game.terrain[self.x][self.y]["type"]
@@ -195,7 +204,6 @@ class Unit:
                 self.is_hidden = True
             else:
                 self.is_hidden = False
-
 
         if self.is_hidden:
             alpha_surface = pygame.Surface((CELL_SIZE, CELL_SIZE), pygame.SRCALPHA)
@@ -211,6 +219,7 @@ class Unit:
                 (self.x * CELL_SIZE + CELL_SIZE // 2, self.y * CELL_SIZE + CELL_SIZE // 2), 
                 CELL_SIZE // 3
             )
+
         
         # 血量条参数
         health_bar_width = CELL_SIZE - 4
@@ -256,6 +265,19 @@ class Unit:
 
         screen.blit(surface, (0, 0))
     
+
+    def get_vision(self):
+        """计算单位的视野范围"""
+        vision_range = 5
+        vision = [
+            (self.x + dx, self.y + dy)
+            for dx in range(-vision_range, vision_range + 1)
+            for dy in range(-vision_range, vision_range + 1)
+            if 0 <= self.x + dx < GRID_SIZE and 0 <= self.y + dy < GRID_SIZE and dx**2 + dy**2 <= vision_range**2
+        ]
+        return vision
+
+    
     
 
 
@@ -272,7 +294,7 @@ class Pyro(Unit):
         self.image = pygame.transform.scale(self.image, (CELL_SIZE, CELL_SIZE))
 
     
-    def handle_terrain_change(self, game):
+    def handle_single_attack(self, game):
         """改变地形技能"""
         surrounding_positions = [
             (self.x - 1, self.y),

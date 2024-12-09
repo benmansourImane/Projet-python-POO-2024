@@ -64,7 +64,7 @@ class Game:
 
 
     def generate_map(self):
-        # 草地为默认地形
+        # 草地prairie
         for x in range(GRID_SIZE):
             for y in range(GRID_SIZE):
                 # 检查是否是单位生成区域
@@ -75,7 +75,7 @@ class Game:
                     # 其他区域默认也生成草地
                     self.terrain[x][y] = {"type": "grass", "image": random.choice(self.terrain_images["grass"])}
 
-        # 道路生成
+        # 道路rue
         for _ in range(2):  # 道路数量
             x, y = random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1)
             for _ in range(12):  # 道路长度
@@ -86,7 +86,7 @@ class Game:
                 x = max(0, min(GRID_SIZE - 1, x))
                 y = max(0, min(GRID_SIZE - 1, y))
 
-        # 水生成
+        # 水eau
         for _ in range(3):  # 水域数量
             x, y = random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1)
             for _ in range(12):  # 水域长度
@@ -97,7 +97,7 @@ class Game:
                 x = max(0, min(GRID_SIZE - 1, x))
                 y = max(0, min(GRID_SIZE - 1, y))
 
-        # 岩浆生成
+        # 岩浆magma
         for _ in range(4):  # 每组岩浆生成4组区域
             x, y = random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1)
             cluster_size = random.randint(2, 3)  # 每组岩浆大小为2到3块
@@ -110,8 +110,8 @@ class Game:
                 y = max(0, min(GRID_SIZE - 1, y))
 
 
-        # 树生成
-        for _ in range(6):  # 随机树
+        # 树Arbre
+        for _ in range(8):  # 随机树
             x, y = random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1)
             if self.terrain[x][y]["type"] == "grass" and not ((0 <= x < 3 and 0 <= y < 3) or (GRID_SIZE - 3 <= x < GRID_SIZE and GRID_SIZE - 3 <= y < GRID_SIZE)):
                 self.terrain[x][y] = {"type": "tree", "image": self.terrain_images["tree"]}
@@ -235,6 +235,27 @@ class Game:
         pygame.display.flip()
         pygame.time.delay(500)  # 延迟以显示技能效果
 
+    def get_combined_vision(self):
+        """合并己方所有单位的视野范围"""
+        combined_vision = set()
+        for unit in self.player_units:
+            if unit.health > 0:  # 仅健康单位提供视野
+                combined_vision.update(unit.get_vision())
+        return combined_vision
+
+
+    def draw_fog_of_war(self, combined_vision):
+        """绘制战争迷雾"""
+        fog_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        fog_surface.fill((0, 0, 0, 150))  # 半透明黑色覆盖全屏
+
+        # 清除视野内的迷雾
+        for x, y in combined_vision:
+            rect = pygame.Rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+            pygame.draw.rect(fog_surface, (0, 0, 0, 0), rect)  # 清除迷雾
+
+        self.screen.blit(fog_surface, (0, 0))
+
 
 
 
@@ -315,32 +336,38 @@ class Game:
         self.check_victory()  # 检查胜负条件
 
 
+    
     def flip_display(self):
         """刷新屏幕显示"""
         self.screen.fill(BLACK)
 
-        # 绘制网格
-        for x in range(0, WIDTH, CELL_SIZE):
-            for y in range(0, HEIGHT, CELL_SIZE):
-                rect = pygame.Rect(x, y, CELL_SIZE, CELL_SIZE)
-                pygame.draw.rect(self.screen, WHITE, rect, 1)
-
-        # 绘制地形
+        # 绘制网格和地形
         for x in range(GRID_SIZE):
             for y in range(GRID_SIZE):
                 terrain = self.terrain[x][y]
                 self.screen.blit(terrain["image"], (x * CELL_SIZE, y * CELL_SIZE))
 
-        # 绘制单位
-        for unit in self.player_units + self.enemy_units:
-            unit.draw(self.screen, game=self)  # 传递 game 参数
-
-        # 如果有单位被选中，绘制其移动范围
+        # 绘制己方单位
         for unit in self.player_units:
-            if unit.is_selected:
-                unit.draw_move_range(self.screen, self)  # 传递 game 参数
+            if unit.health > 0:  # 仅绘制健康单位
+                unit.draw(self.screen,self)
+
+        # 获取玩家合并视野
+        combined_vision = self.get_combined_vision()
+
+        # 绘制敌方单位，仅绘制在视野内的敌方单位
+        for unit in self.enemy_units:
+            if unit.health > 0 and (unit.x, unit.y) in combined_vision:
+                unit.draw(self.screen,self)
+
+        # 绘制战争迷雾
+        self.draw_fog_of_war(combined_vision)
 
         pygame.display.flip()
+    
+
+
+
 
 
 
