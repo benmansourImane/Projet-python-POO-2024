@@ -55,8 +55,10 @@ class Game:
             "road": pygame.transform.scale(pygame.image.load("pic/rue1.png"), (CELL_SIZE, CELL_SIZE)),
             "water": [pygame.transform.scale(pygame.image.load(f"pic/eau_{i}.png"), (CELL_SIZE, CELL_SIZE)) for i in range(1, 3)],
             "lava": pygame.transform.scale(pygame.image.load("pic/magma.png"), (CELL_SIZE, CELL_SIZE)),
-            "tree": pygame.transform.scale(pygame.image.load("pic/Arbre.png"), (CELL_SIZE, CELL_SIZE))
-        }
+            "tree": pygame.transform.scale(pygame.image.load("pic/Arbre.png"), (CELL_SIZE, CELL_SIZE)),
+            "wall": pygame.transform.scale(pygame.image.load("pic/mur.png"), (CELL_SIZE, CELL_SIZE)) ,  # Nouveau type de terrain : mur
+
+         }
         
 
         self.generate_map()
@@ -87,7 +89,8 @@ class Game:
                 y = max(0, min(GRID_SIZE - 1, y))
 
         # 水eau
-        for _ in range(3):  # 水域数量
+        for _ in range(3):  # 水域数量 # Nombre d'eaux
+
             x, y = random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1)
             for _ in range(12):  # 水域长度
                 if not ((0 <= x < 3 and 0 <= y < 3) or (GRID_SIZE - 3 <= x < GRID_SIZE and GRID_SIZE - 3 <= y < GRID_SIZE)):
@@ -115,7 +118,22 @@ class Game:
             x, y = random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1)
             if self.terrain[x][y]["type"] == "grass" and not ((0 <= x < 3 and 0 <= y < 3) or (GRID_SIZE - 3 <= x < GRID_SIZE and GRID_SIZE - 3 <= y < GRID_SIZE)):
                 self.terrain[x][y] = {"type": "tree", "image": self.terrain_images["tree"]}
-    
+        
+
+         # Génération des murs
+        for _ in range(5):  # Crée 5 clusters de murs
+           x, y = random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1)
+           cluster_size = random.randint(3, 6)  # Chaque cluster contient 3 à 6 murs
+           for _ in range(cluster_size):
+              # Vérifie que les murs ne sont pas dans les zones de génération des unités
+            if not ((0 <= x < 3 and 0 <= y < 3) or (GRID_SIZE - 3 <= x < GRID_SIZE and GRID_SIZE - 3 <= y < GRID_SIZE)):
+                self.terrain[x][y] = {"type": "wall", "image": self.terrain_images["wall"]}
+            # Déplace le cluster légèrement
+            x += random.choice([-1, 0, 1])
+            y += random.choice([-1, 0, 1])
+            x = max(0, min(GRID_SIZE - 1, x))  # Garde x dans les limites de la grille
+            y = max(0, min(GRID_SIZE - 1, y))  # Garde y dans les limites de la grille
+
 
     def display_skill_menu(self, selected_unit, position):
         """显示技能菜单"""
@@ -259,61 +277,97 @@ class Game:
 
 
 
-
-
-
+  
 
 
 
 
     def handle_player_turn(self):
-        """玩家回合，选择单位并通过鼠标点击移动或右键打开技能菜单"""
+        """Joue le tour du joueur : sélection de l'unité et déplacement avec les touches directionnelles, et gestion des actions par clavier"""
+
         for selected_unit in self.player_units:
-            if selected_unit.health <= 0:  # 跳过生命值为 0 的单位
-                continue
-            has_acted = False
-            selected_unit.is_selected = True
-            self.flip_display()
+            if selected_unit.health <= 0:  # On passe à l'unité suivante si l'unité a une vie <= 0
+               continue
+        
+            has_acted = False  # Variable pour savoir si l'unité a effectué une action (déplacement, attaque, etc.)
+            selected_unit.is_selected = True  # L'unité est sélectionnée
+            self.flip_display()  # On rafraîchit l'affichage
 
+            # Boucle qui continue jusqu'à ce que l'unité ait agi
             while not has_acted:
-                for event in pygame.event.get():
-                    # 处理关闭事件
+                for event in pygame.event.get():  # Gestion des événements
+                  # Fermeture de la fenêtre
                     if event.type == pygame.QUIT:
-                        pygame.quit()
-                        exit()
+                      pygame.quit()
+                      exit()
 
-                    # 绘制移动范围
+                   # Affichage de la portée de mouvement de l'unité
                     selected_unit.draw_move_range(self.screen, self)
                     pygame.display.flip()
 
-                    # 右键打开技能菜单
-                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:  # 右键点击
-                        self.handle_skill_menu(selected_unit)  # 打开技能菜单
-                        self.flip_display()  # 刷新屏幕以更新技能效果
+                   # Gestion de l'activation du menu de compétences avec le clic droit
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:  #Clic droit
+                      self.handle_skill_menu(selected_unit)  # Ouvre le menu des compétences
+                      self.flip_display()  # Rafraîchit l'affichage après l'ouverture du menu
 
-                    # 左键移动单位
-                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # 左键点击
-                        mouse_x, mouse_y = pygame.mouse.get_pos()
-                        grid_x, grid_y = mouse_x // CELL_SIZE, mouse_y // CELL_SIZE
+                   # Déplacement de l'unité avec un clic gauche
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Clic gauche
+                      mouse_x, mouse_y = pygame.mouse.get_pos()
+                      grid_x, grid_y = mouse_x // CELL_SIZE, mouse_y // CELL_SIZE  # On calcule la position sur la grille
 
-                        # 计算目标位置偏移量
-                        dx, dy = grid_x - selected_unit.x, grid_y - selected_unit.y
-                        if selected_unit.move(dx, dy, self):  # 调用 move 方法验证移动
-                            has_acted = True
+                     # Calcul du déplacement en fonction de la position du clic
+                      dx, dy = grid_x - selected_unit.x, grid_y - selected_unit.y
+                      if selected_unit.move(dx, dy, self):  # Si le mouvement est valide
+                        has_acted = True  # L'unité a agi, on sort de la boucle
 
-                    # 如果按下空格键，跳过移动直接攻击
+                    # Si la barre d'espace est pressée, l'unité attaque
                     if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                        for enemy in self.enemy_units:
+                       for enemy in self.enemy_units:  # Vérifie si un ennemi est dans les alentours de l'unité
                             if abs(selected_unit.x - enemy.x) <= 1 and abs(selected_unit.y - enemy.y) <= 1:
-                                selected_unit.attack(enemy)
-                                if enemy.health <= 0:
-                                    self.enemy_units.remove(enemy)
-                        has_acted = True
+                               selected_unit.attack(enemy)  # Attaque l'ennemi
+                               if enemy.health <= 0:  # Si l'ennemi est mort, on le retire de la liste
+                                  self.enemy_units.remove(enemy)
+                       has_acted = True  # L'unité a agi
 
-                self.flip_display()
-            selected_unit.is_selected = False
-            self.check_victory()  # 检查胜负条件
+                    # Déplacement de l'unité avec les touches directionnelles
+                    if event.type == pygame.KEYDOWN:
+                       if event.key == pygame.K_UP:  # Flèche haut pour se déplacer vers le haut
+                            if selected_unit.move(0, -1, self):  # On déplace l'unité d'une case vers le haut
+                              has_acted = True
+                       if event.key == pygame.K_DOWN:  # Flèche bas pour se déplacer vers le bas
+                            if selected_unit.move(0, 1, self):  # On déplace l'unité d'une case vers le bas
+                               has_acted = True
+                       if event.key == pygame.K_LEFT:  # Flèche gauche pour se déplacer vers la gauche
+                            if selected_unit.move(-1, 0, self):  # On déplace l'unité d'une case vers la gauche
+                              has_acted = True
+                       if event.key == pygame.K_RIGHT:  # Flèche droite pour se déplacer vers la droite
+                           if selected_unit.move(1, 0, self):  # On déplace l'unité d'une case vers la droite
+                             has_acted = True
 
+                   # Gestion des touches numériques pour sélectionner des compétences (si applicable)
+                    if event.type == pygame.KEYDOWN:
+                       if event.key == pygame.K_1:  # Appuyer sur '1' pour sélectionner la première compétence
+                          self.select_skill(1)  # Sélectionne la compétence numéro 1
+                       elif event.key == pygame.K_2:  # Appuyer sur '2' pour sélectionner la deuxième compétence
+                         self.select_skill(2)  # Sélectionne la compétence numéro 2
+                      # Ajouter plus de touches si vous avez plus de compétences (par exemple, K_3, K_4, etc.)
+
+                    # Si une touche "Retour" est pressée (par exemple 'Esc'), on peut annuler l'action ou revenir à un état précédent
+                    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                       self.undo_last_action()  # Annuler la dernière action effectuée (implémenter cette fonction si nécessaire)
+
+            self.flip_display()  # Rafraîchissement final de l'écran
+
+        selected_unit.is_selected = False  # L'unité n'est plus sélectionnée après avoir agi
+        self.check_victory()  # Vérifie si la victoire a été atteinte
+
+
+    
+
+
+
+
+    
 
 
     def handle_enemy_turn(self):
@@ -483,17 +537,31 @@ class Game:
 def main():
     pygame.init()
 
+     # Initialisation du module mixer de Pygame, qui est utilisé pour gérer les sons et la musique
+    pygame.mixer.init() 
+    # Chargement du fichier audio (ici un fichier mp3 nommé "stranger-things-124008.mp3")
+    pygame.mixer.music.load("stranger-things-124008.mp3") 
+
+    # Définition du volume de la musique à 50% (0.5, la plage va de 0 à 1)
+    pygame.mixer.music.set_volume(0.5) 
+    # Lecture de la musique en boucle infinie (-1 signifie une boucle infinie)
+    pygame.mixer.music.play(-1)
+
     # 初始化窗口
+    #Initialiser la fenêtre
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Mon jeu de python")
 
+    #Créer une instance de jeu
     # 创建游戏实例
     game = Game(screen)
 
     # 显示菜单
+    # Afficher le menu
     game.show_menu()
 
     # 进入主游戏循环
+    # Entrez dans la boucle principale du jeu
     while True:
         game.handle_player_turn()
         game.handle_enemy_turn()
@@ -501,4 +569,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()

@@ -92,47 +92,53 @@ class Unit:
     def move(self, dx, dy, game):
 
         if self.health <= 0:
-            print(f"{self.__class__.__name__} 生命值为 0，无法移动！")
+            print(f"{self.__class__.__name__} 0 santé, incapable de bouger !")
             return False
+        """Déplacer les unités et gérer les effets de terrain"""
         """移动单位并处理地形效果"""
         new_x, new_y = self.x + dx, self.y + dy
 
-
+        # Vérifiez si la cible est dans les limites de la carte
         # 检查目标是否在地图边界内
         if not (0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE):
             return False
 
+        # Vérifiez si la cible est dans la plage de mouvement
         # 检查目标是否在移动范围内
         if abs(dx) + abs(dy) > self.move_range:
-            print(f"{self.__class__.__name__} 无法移动到超出范围的位置！")
+            print(f"{self.__class__.__name__} Impossible de se déplacer vers un endroit hors de portée！")
             return False
-
+        
+        # Vérifier les restrictions de terrain
         # 检查地形限制
         terrain_type = game.terrain[new_x][new_y]["type"]
         if terrain_type == "water" and isinstance(self, (Sniper, Scout)):
-            print(f"{self.__class__.__name__} 无法通过水面！")
+            print(f"{self.__class__.__name__} La loi passe par l'eau !")
             return False
-
+        
+        # Déplacer vers un nouvel emplacement
         # 移动到新位置
         self.x, self.y = new_x, new_y
-
+        
+        # Mettre à jour le statut invisible
         # 更新隐身状态
         self.is_hidden = terrain_type == "tree" and isinstance(self, (Sniper, Scout))
         
         
-
+        # Traiter les effets du magma
         # 处理岩浆效果
         if terrain_type == "lava":
             self.trigger_fire_effect(game.screen)
             self.health -= 2
             self.defense = max(0, self.defense - 1)
-            print(f"{self.__class__.__name__} 在岩浆上受到伤害！生命值：{self.health}，防御值：{self.defense}")
+            print(f"{self.__class__.__name__} Subissez des dégâts sur la lave !：{self.health}，défense值：{self.defense}")
         return True
 
 
     def trigger_fire_effect(self, screen):
         """触发火焰粒子特效"""
-        particles = []  # 粒子列表
+        """Déclencher des effets de particules de feu"""
+        particles = []  # 粒子列表 # Liste de particules
         for _ in range(50):  # 增加粒子数量
             fire_x = random.randint(self.x * CELL_SIZE, (self.x + 1) * CELL_SIZE)
             fire_y = random.randint(self.y * CELL_SIZE + CELL_SIZE // 2, (self.y + 1) * CELL_SIZE)
@@ -162,40 +168,61 @@ class Unit:
             pygame.display.flip()
             pygame.time.delay(30)  # 控制帧率
 
+
+
     def draw_bullet(self, game, target):
         """绘制子弹效果"""
         bullet_color = (192, 192, 192)  # 金属色
         bullet_x, bullet_y = self.x * CELL_SIZE + CELL_SIZE // 2, self.y * CELL_SIZE + CELL_SIZE // 2
         target_x, target_y = target.x * CELL_SIZE + CELL_SIZE // 2, target.y * CELL_SIZE + CELL_SIZE // 2
 
-        for i in range(20):  # 子弹分 20 帧运动
-            current_x = bullet_x + (target_x - bullet_x) * i / 20
-            current_y = bullet_y + (target_y - bullet_y) * i / 20
-            game.flip_display()  # 刷新其他内容
-            pygame.draw.circle(game.screen, bullet_color, (int(current_x), int(current_y)), 5)
-            pygame.display.flip()
-            pygame.time.delay(30)
+         # Calculer les deltas de mouvement
+        delta_x = (target_x - bullet_x) / 20
+        delta_y = (target_y - bullet_y) / 20
 
+        # Dessiner la balle pendant 20 itérations
+        for i in range(20):
+           # Calculer la nouvelle position de la balle à chaque itération
+           current_x = bullet_x + delta_x * i
+           current_y = bullet_y + delta_y * i
+        
+          # Dessiner la balle à la position calculée
+           pygame.draw.circle(game.screen, bullet_color, (int(current_x), int(current_y)), 5)
+
+           # Rafraîchir l'affichage après chaque itération
+           pygame.display.flip()
+
+          # Délai pour contrôler la vitesse de l'animation
+           pygame.time.delay(30)  # Ajuste ce délai pour ajuster la vitesse de l'animation 
+
+
+    
 
 
 
 
 
     def attack(self, target):
+    # Vérifie si l'unité est cachée, dans ce cas elle ne peut pas attaquer
         if self.is_hidden:
-            print(f"{self.__class__.__name__} 在隐身状态下无法攻击！")
-            return
+          print(f"{self.__class__.__name__} Impossible d'attaquer en étant invisible !")  # "L'unité en mode furtif ne peut pas attaquer !"
+          return  # La méthode s'arrête ici, l'attaque n'a pas lieu
+
+     # Si la défense de la cible est différente de zéro, on calcule les dégâts
         if target.defense != 0:
-            damage = max(self.attack_power - target.defense, 0)
+         # Les dégâts sont la différence entre la puissance d'attaque de l'unité et la défense de la cible
+          damage = max(self.attack_power - target.defense, 0)  # Les dégâts ne peuvent pas être inférieurs à 0
         else:
-            damage = self.attack_power * 1.2
+        # Si la cible n'a pas de défense, les dégâts sont augmentés de 20%
+         damage = self.attack_power * 1.2  # Les dégâts sont augmentés de 20%
+  
+        # On applique les dégâts à la cible en réduisant sa santé
         target.health -= damage
+   
 
     def draw(self, screen,game=None):
         """Affiche l'unité sur l'écran.
-        在屏幕上绘制单位。"""
-    
-        
+        在屏幕上绘制单位。"""  
         
         """绘制单位，并根据隐身状态调整透明度"""
         if game:
@@ -295,6 +322,7 @@ class Pyro(Unit):
 
     
     def handle_single_attack(self, game):
+        """Compétence de modification du terrain"""
         """改变地形技能"""
         surrounding_positions = [
             (self.x - 1, self.y),
@@ -302,13 +330,14 @@ class Pyro(Unit):
             (self.x, self.y - 1),
             (self.x, self.y + 1),
         ]
-
+        # Dessiner la portée de la compétence
         # 绘制技能范围
         game.draw_skill_range(surrounding_positions)
 
         running = True
         while running:
             for event in pygame.event.get():
+                 # Clic gauche pour choisir la cible
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # 左键点击选择目标
                     mouse_x, mouse_y = event.pos
                     grid_x, grid_y = mouse_x // CELL_SIZE, mouse_y // CELL_SIZE
@@ -326,6 +355,8 @@ class Pyro(Unit):
 
 
     def handle_group_attack(self, game):
+        """Compétence d'attaque de groupe"""
+
         """群体攻击技能"""
         affected_positions = [
             (self.x + dx, self.y + dy)
@@ -333,23 +364,28 @@ class Pyro(Unit):
             for dy in range(-3, 4)
             if 0 <= self.x + dx < GRID_SIZE and 0 <= self.y + dy < GRID_SIZE and dx**2 + dy**2 <= 4
         ]
-
+        # Infliger des dégâts à toutes les unités dans la zone d'effet
         # 对范围内的所有单位造成伤害
         for unit in game.player_units + game.enemy_units:
             if (unit.x, unit.y) in affected_positions:
                 unit.health -= 5
-                print(f"{unit.__class__.__name__} 在群体攻击中受到了伤害！剩余生命值：{unit.health}")
+                print(f"{unit.__class__.__name__} a été blessé par l'attaque de groupe ! Vie restante：{unit.health}")
 
+        # Dessiner l'effet d'explosion
         # 绘制爆炸效果
+       
         self.draw_explosion_effect(game, affected_positions)
 
     def draw_explosion_effect(self, game, positions):
+         # Dessiner l'effet d'explosion
         """绘制爆炸效果"""
         explosion_image = pygame.image.load("pic/explosion.png")
         explosion_image = pygame.transform.scale(explosion_image, (CELL_SIZE, CELL_SIZE))
 
         # 持续显示爆炸效果
-        for _ in range(30):  # 约 3 秒，每帧持续 100ms
+
+        # Afficher l'effet d'explosion pendant un certain temps
+        for _ in range(30):  # 约 3 秒，每帧持续 100ms  Environ 3 secondes, chaque image dure 100ms
             for x, y in positions:
                 game.screen.blit(explosion_image, (x * CELL_SIZE, y * CELL_SIZE))
             pygame.display.flip()
@@ -367,9 +403,10 @@ class Pyro(Unit):
 
 
     def handle_defense(self, selected_unit):
+        """Compétence de défense"""
         """防御技能"""
         selected_unit.defense += 2
-        print(f"{selected_unit} 使用了防御技能，防御力增加到 {selected_unit.defense}")
+        print(f"{selected_unit}   a utilisé une compétence de défense, défense augmentée à{selected_unit.defense}")
 
 
 
@@ -385,13 +422,15 @@ class Medic(Unit):
 
     def handle_single_attack(self, game):
         """单一攻击技能，向不超过3格的敌人发射子弹"""
+        """Compétence d'attaque unique, tirer des balles sur un ennemi dans un rayon de 3 cases"""
+
         valid_targets = [
             enemy for enemy in game.enemy_units
             if abs(enemy.x - self.x) + abs(enemy.y - self.y) <= 3
         ]
 
         if not valid_targets:
-            print("没有目标在攻击范围内！")
+            print(" Aucune cible dans la portée de l'attaque !")
             return
 
         # 绘制攻击范围
@@ -407,7 +446,7 @@ class Medic(Unit):
                         if (enemy.x, enemy.y) == (grid_x, grid_y):
                             self.draw_bullet(game, enemy)
                             enemy.health -= 5
-                            print(f"{enemy.__class__.__name__} 被 Medic 单一攻击命中！剩余生命值：{enemy.health}")
+                            print(f"{enemy.__class__.__name__}  a été touché par l'attaque unique de Medic ! Vie restante：{enemy.health}")
                             running = False
                             break
                 elif event.type == pygame.QUIT:
@@ -419,6 +458,7 @@ class Medic(Unit):
 
     def handle_group_attack(self, game):
         """群体攻击技能，治疗半径为2格的己方单位"""
+        """Compétence de groupe, soigner les unités alliées dans un rayon de 2 cases"""
         affected_positions = [
             (self.x + dx, self.y + dy)
             for dx in range(-2, 3)
@@ -429,22 +469,23 @@ class Medic(Unit):
         for unit in game.player_units:
             if (unit.x, unit.y) in affected_positions:
                 unit.health += 3
-                print(f"{unit.__class__.__name__} 在群体治疗中恢复了生命值！当前生命值：{unit.health}")
+                print(f"{unit.__class__.__name__} a récupéré des points de vie dans le soin de groupe ! Vie actuelle：{unit.health}")
 
         # 绘制治疗效果
         self.draw_healing_effect(game, affected_positions)
     
 
     def draw_healing_effect(self, game, positions):
+        """Dessiner l'effet de soin"""
         """绘制治疗效果"""
-        healing_color = (0, 255, 0, 150)  # 半透明绿色
+        healing_color = (0, 255, 0, 150)  # 半透明绿色 # Vert semi-transparent
         surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
 
         for x, y in positions:
             rect = pygame.Rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
             pygame.draw.rect(surface, healing_color, rect)
 
-        for _ in range(10):  # 光效持续 10 帧
+        for _ in range(10):  # 光效持续 10 帧 # L'effet de guérison dure 10 images
             game.screen.blit(surface, (0, 0))
             pygame.display.flip()
             pygame.time.delay(100)
@@ -452,8 +493,9 @@ class Medic(Unit):
 
     def handle_defense(self):
         """防御技能，给自己增加防御力"""
+        """Compétence de défense, augmenter la défense de soi-même"""
         self.defense += 3
-        print(f"{self.__class__.__name__} 使用了防御技能！当前防御值：{self.defense}")
+        print(f"{self.__class__.__name__}  a utilisé une compétence de défense ! Défense actuelle  ：{self.defense}")
 
 
 
@@ -469,6 +511,7 @@ class Sniper(Unit):
         self.image = pygame.transform.scale(self.image, (CELL_SIZE, CELL_SIZE))
 
     def handle_single_attack(self, game):
+        """Compétence d'attaque unique du Sniper, tirer sur l'ennemi le plus proche"""
         """Sniper 的单一攻击技能，朝最近的敌人发射子弹"""
         valid_targets = [
             enemy for enemy in game.enemy_units
@@ -476,20 +519,25 @@ class Sniper(Unit):
         ]
 
         if not valid_targets:
-            print("没有目标在攻击范围内！")
+            print( "Aucune cible dans la portée de l'attaque !")
             return
-
+        
+        # Trouver l'ennemi le plus proche
         # 找到最近的敌人
         target = min(valid_targets, key=lambda enemy: (enemy.x - self.x) ** 2 + (enemy.y - self.y) ** 2)
 
+        # Dessiner l'effet de balle
         # 绘制子弹效果
         self.draw_bullet(game, target)
         target.health -= 4  # Sniper 攻击力较高
-        print(f"{target.__class__.__name__} 被 Sniper 单一攻击命中！剩余生命值：{target.health}")
+        print(f"{target.__class__.__name__} a été touché par l'attaque unique du Sniper ! Vie restante：{target.health}")
 
     
     def handle_group_attack(self, game):
+          
         """Sniper 的群体技能,减少半径1内敌方单位的防御"""
+        """Compétence de groupe du Sniper, réduire la défense des ennemis dans un rayon de 1 case"""
+       
         affected_positions = [
             (self.x + dx, self.y + dy)
             for dx in range(-1, 2)
@@ -500,31 +548,71 @@ class Sniper(Unit):
         for enemy in game.enemy_units:
             if (enemy.x, enemy.y) in affected_positions:
                 enemy.defense = max(0, enemy.defense - 5)
-                print(f"{enemy.__class__.__name__} 的防御减少了 5 点！当前防御：{enemy.defense}")
+                print(f"{enemy.__class__.__name__} a vu sa défense réduite de 5 ! Défense actuelle ：{enemy.defense}")
 
+
+
+        # Dessiner l'effet jaune de réduction de défense
         # 绘制黄色特效
         self.draw_defense_reduction_effect(game, affected_positions)
 
     def draw_defense_reduction_effect(self, game, positions):
+        """Dessiner l'effet jaune de réduction de défense"""
         """绘制黄色防御减弱特效"""
-        effect_color = (255, 255, 0, 50)  # 半透明黄色
+        effect_color = (255, 255, 0, 50)  # 半透明黄色  # Jaune semi-transparent
         surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
 
         for x, y in positions:
             rect = pygame.Rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
             pygame.draw.rect(surface, effect_color, rect)
 
-        for _ in range(10):  # 特效持续 10 帧
+        for _ in range(10):  # 特效持续 10 帧  # L'effet dure environ 10 images
             game.screen.blit(surface, (0, 0))
             pygame.display.flip()
             pygame.time.delay(100)
     
 
     def handle_defense(self):
+        """Compétence de défense"""
         """防御技能，给自己增加1点防御"""
         self.defense += 1
-        print(f"{self.__class__.__name__} 使用了防御技能！当前防御值：{self.defense}")
+        print(f"{self.__class__.__name__}  a utilisé une compétence de défense ! Défense actuelle：{self.defense}")
 
+    def hide_behind_wall(self, game):
+        """
+        Compétence spéciale : permet au Sniper de se cacher derrière un mur.
+        - Vérification si mur est adjacent au Sniper.
+        - Si oui on va activer le mode "caché", qui augmente sa défense temporairement.
+        """
+        # Liste des positions adjacentes
+        adjacent_positions = [
+            (self.x + dx, self.y + dy)
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]  # Haut, bas, gauche, droite
+            if 0 <= self.x + dx < GRID_SIZE and 0 <= self.y + dy < GRID_SIZE
+        ]
+
+        # Vérifie s'il y a un mur à proximité
+        for pos in adjacent_positions:
+            if pos in game.wall_positions:  # Vérifie si la position contient un mur
+                self.defense += 2  # Augmente temporairement la défense
+                print(f"{self.__class__.__name__} s'est caché derrière un mur ! Défense actuelle : {self.defense}")
+                return
+
+        print(f"Aucun mur proche pour se cacher !")
+
+    def draw_bullet(self, game, target):
+        """
+        Dessine un effet visuel pour représenter le tir du Sniper.
+        - Relie la position du Sniper à celle de l'ennemi avec une ligne.
+        """
+        bullet_color = (255, 0, 0)  # Rouge
+        start_pos = (self.x * CELL_SIZE + CELL_SIZE // 2, self.y * CELL_SIZE + CELL_SIZE // 2)
+        end_pos = (target.x * CELL_SIZE + CELL_SIZE // 2, target.y * CELL_SIZE + CELL_SIZE // 2)
+
+        for _ in range(5):  # L'effet dure 5 images
+            pygame.draw.line(game.screen, bullet_color, start_pos, end_pos, 3)
+            pygame.display.flip()
+            pygame.time.delay(100)
 
 
 
@@ -560,7 +648,7 @@ class Scout(Unit):
         # 总计伤害
         damage = 1 * 5  # 每颗子弹 1 点伤害，总计 5 点
         target.health -= damage
-        print(f"{target.__class__.__name__} 被 Scout 的霰弹攻击命中！剩余生命值：{target.health}")
+        print(f"{target.__class__.__name__} Touché par l'attaque au fusil de chasse de Scout ! Santé restante：{target.health}")
 
 
     #shortgun!
@@ -601,7 +689,7 @@ class Scout(Unit):
         for enemy in game.enemy_units:
             if (enemy.x, enemy.y) in affected_positions:
                 enemy.attack_power = max(0, enemy.attack_power - 2)
-                print(f"{enemy.__class__.__name__} 的攻击力降低了 2 点！当前攻击力：{enemy.attack_power}")
+                print(f"{enemy.__class__.__name__} La puissance d'attaque de a été réduite de 2 points ! Puissance d'attaque actuelle：{enemy.attack_power}")
 
         # 绘制迷惑烟雾效果
         self.draw_smoke_effect(game, affected_positions)
@@ -627,7 +715,7 @@ class Scout(Unit):
     def handle_defense(self):
         """Scout 的防御技能，增加 1 点防御"""
         self.defense += 1
-        print(f"{self.__class__.__name__} 使用了防御技能！当前防御值：{self.defense}")
+        print(f"{self.__class__.__name__} Compétences défensives utilisées ! Valeur de défense actuelle：{self.defense}")
 
 
 
