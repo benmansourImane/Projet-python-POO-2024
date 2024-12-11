@@ -3,7 +3,7 @@ import random
 
 # Constantes
 # 常量定义
-GRID_SIZE = 15
+GRID_SIZE = 10
 CELL_SIZE = 60
 WIDTH = GRID_SIZE * CELL_SIZE
 HEIGHT = GRID_SIZE * CELL_SIZE
@@ -168,8 +168,6 @@ class Unit:
             pygame.display.flip()
             pygame.time.delay(30)  # 控制帧率
 
-
-
     def draw_bullet(self, game, target):
         """绘制子弹效果"""
         bullet_color = (192, 192, 192)  # 金属色
@@ -194,13 +192,6 @@ class Unit:
 
           # Délai pour contrôler la vitesse de l'animation
            pygame.time.delay(30)  # Ajuste ce délai pour ajuster la vitesse de l'animation 
-
-
-    
-
-
-
-
 
     def attack(self, target):
     # Vérifie si l'unité est cachée, dans ce cas elle ne peut pas attaquer
@@ -246,7 +237,6 @@ class Unit:
                 (self.x * CELL_SIZE + CELL_SIZE // 2, self.y * CELL_SIZE + CELL_SIZE // 2), 
                 CELL_SIZE // 3
             )
-
         
         # 血量条参数
         health_bar_width = CELL_SIZE - 4
@@ -269,11 +259,6 @@ class Unit:
         defense_ratio = max(self.defense, 0) / 5  # 假设满防御为10
         pygame.draw.rect(screen, (100, 100, 100), (defense_bar_x, defense_bar_y, defense_bar_width, defense_bar_height))  # 背景
         pygame.draw.rect(screen, (0, 0, 255), (defense_bar_x, defense_bar_y, defense_bar_width * defense_ratio, defense_bar_height))  # 当前防御值
-    
-    
-    
-    
-    
     
     def draw_move_range(self, screen, game):
         """绘制移动范围，考虑水面阻碍"""
@@ -303,13 +288,6 @@ class Unit:
             if 0 <= self.x + dx < GRID_SIZE and 0 <= self.y + dy < GRID_SIZE and dx**2 + dy**2 <= vision_range**2
         ]
         return vision
-
-    
-    
-
-
-
-
 
 #Les rôles héritent de la classe Unit
 class Pyro(Unit):
@@ -399,17 +377,11 @@ class Pyro(Unit):
             pygame.display.flip()
             pygame.time.delay(100)
 
-
-
-
     def handle_defense(self, selected_unit):
         """Compétence de défense"""
         """防御技能"""
         selected_unit.defense += 2
         print(f"{selected_unit}   a utilisé une compétence de défense, défense augmentée à{selected_unit.defense}")
-
-
-
 
 
 class Medic(Unit):
@@ -496,10 +468,6 @@ class Medic(Unit):
         """Compétence de défense, augmenter la défense de soi-même"""
         self.defense += 3
         print(f"{self.__class__.__name__}  a utilisé une compétence de défense ! Défense actuelle  ：{self.defense}")
-
-
-
-
 
 
 class Sniper(Unit):
@@ -614,10 +582,6 @@ class Sniper(Unit):
             pygame.display.flip()
             pygame.time.delay(100)
 
-
-
-
-
 class Scout(Unit):
     def __init__(self, x, y, team):
         super().__init__(x, y, health=12, attack_power=5,defense = 2, team=team)
@@ -673,10 +637,6 @@ class Scout(Unit):
             pygame.time.delay(30)
 
 
-
-
-
-
     def handle_group_attack(self, game):
         """Scout 的群体技能，释放迷惑烟雾降低敌人攻击力"""
         affected_positions = [
@@ -694,8 +654,6 @@ class Scout(Unit):
         # 绘制迷惑烟雾效果
         self.draw_smoke_effect(game, affected_positions)
 
-
-
     def draw_smoke_effect(self, game, positions):
         """绘制迷惑烟雾特效"""
         smoke_color = (128, 128, 128, 150)  # 半透明灰色
@@ -710,13 +668,7 @@ class Scout(Unit):
             pygame.display.flip()
             pygame.time.delay(100)
 
-    
-
     def handle_defense(self):
         """Scout 的防御技能，增加 1 点防御"""
         self.defense += 1
         print(f"{self.__class__.__name__} Compétences défensives utilisées ! Valeur de défense actuelle：{self.defense}")
-
-
-
-

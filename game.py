@@ -222,16 +222,6 @@ class Game:
                     running = False  # 关闭菜单
 
 
-
-
-
-    
-    
-
-
-    
-
-
     def draw_skill_range(self, positions):
         """绘制技能范围"""
         surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
@@ -273,13 +263,6 @@ class Game:
             pygame.draw.rect(fog_surface, (0, 0, 0, 0), rect)  # 清除迷雾
 
         self.screen.blit(fog_surface, (0, 0))
-
-
-
-
-  
-
-
 
 
     def handle_player_turn(self):
@@ -362,35 +345,149 @@ class Game:
         self.check_victory()  # Vérifie si la victoire a été atteinte
 
 
-    
 
 
 
 
-    
 
+
+
+    def is_target_in_range(self, enemy, target):
+        """Vérifie si la cible est à portée de l'ennemi. La portée dépend de l'attribut `attack_range` de l'unité."""
+        # On vérifie que la distance Manhattan est inférieure ou égale à la portée d'attaque
+        attack_range = getattr(enemy, "attack_range", 1)  # Valeur par défaut : 1
+        in_range = abs(enemy.x - target.x) + abs(enemy.y - target.y) <= attack_range
+        print(f"{enemy.__class__.__name__} vérifie si {target.__class__.__name__} est à portée : {'Oui' if in_range else 'Non'}.")
+        return in_range
 
     def handle_enemy_turn(self):
-        """非常简单的敌人AI逻辑。"""
+        """非常简单的敌人AI逻辑。/ Logique IA ennemie très simple."""
         for enemy in self.enemy_units:
-            if enemy.health <= 0:  # 跳过生命值为 0 的单位
+            if enemy.health <= 0:  # 跳过生命值为 0 的单位 /Passer les unités avec 0 santé
+                print(f"{enemy.__class__.__name__} est mort. Passe au prochain ennemi.")
                 continue
-            # 随机选择目标玩家单位
+            """# 随机选择目标玩家单位 / Sélectionnez au hasard les unités de joueurs cibles
             target = random.choice(self.player_units)
             dx = 1 if enemy.x < target.x else -1 if enemy.x > target.x else 0
             dy = 1 if enemy.y < target.y else -1 if enemy.y > target.y else 0
 
-            # 尝试移动敌人
-            if enemy.move(dx, dy, self):  # 传递 game 实例
-                # 如果移动成功，检查是否可以攻击目标
+            # 尝试移动敌人  / # Essayez de déplacer l'ennemi
+            if enemy.move(dx, dy, self):  # 传递 game 实例 / Passer l'instance de jeu
+                # 如果移动成功，检查是否可以攻击目标 /# Si le mouvement réussit, vérifiez si la cible peut être attaquée
                 if abs(enemy.x - target.x) <= 1 and abs(enemy.y - target.y) <= 1:
                     enemy.attack(target)
                     if target.health <= 0:
-                        self.player_units.remove(target)
-        self.check_victory()  # 检查胜负条件
+                        self.player_units.remove(target) """
+            # Étape 1: Trouver la cible la plus proche (l'unité la plus proche de l'ennemi)
+            closest_target = self.find_closest_target(enemy)
+            if closest_target:
+                print(f"{enemy.__class__.__name__} a trouvé une cible : {closest_target.__class__.__name__} à ({closest_target.x}, {closest_target.y}).")
+            else:
+                print(f"{enemy.__class__.__name__} n'a trouvé aucune cible.")
+                continue
+
+            # Étape 2: Se déplacer vers la cible si elle est à portée de mouvement
+            if self.move_enemy_towards_target(enemy, closest_target):
+                print(f"{enemy.__class__.__name__} se déplace vers ({enemy.x}, {enemy.y}).")
+            else:
+                print(f"{enemy.__class__.__name__} ne peut pas se déplacer vers {closest_target.__class__.__name__}. Passe au prochain ennemi.")
+                continue
+
+            # Étape 3: Si l'ennemi est à portée d'attaque, attaquer
+            if self.is_target_in_range(enemy, closest_target):
+                print(f"{enemy.__class__.__name__} attaque {closest_target.__class__.__name__} à ({closest_target.x}, {closest_target.y}) !")
+                enemy.attack(closest_target)
+                if closest_target.health <= 0:
+                    print(f"{closest_target.__class__.__name__} est mort. Retiré des unités du joueur.")
+                    self.player_units.remove(closest_target)
 
 
+        self.check_victory()  # 检查胜负条件 / # Vérifiez les conditions gagnantes et perdantes
+
+    def find_closest_target(self, enemy):
+        """Trouve la cible la plus proche parmi les unités ennemies ou alliées."""
+        closest_target = None
+        min_distance = float('inf')
+
+        for unit in self.player_units:
+            if unit.health > 0:  # Ignore les unités mortes
+                distance = abs(unit.x - enemy.x) + abs(unit.y - enemy.y)
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_target = unit
+
+        if closest_target:
+            print(f"{enemy.__class__.__name__} identifie {closest_target.__class__.__name__} comme la cible la plus proche.")
+        else:
+            print(f"{enemy.__class__.__name__} ne trouve aucune cible valide.")
+        return closest_target
     
+    def move_enemy_towards_target(self, enemy, target):
+        """Déplace l'ennemi vers la cible la plus proche."""
+        if target is None:
+            print(f"{enemy.__class__.__name__} n'a pas de cible vers laquelle se déplacer.")
+            return False  # Aucun objectif à atteindre
+
+        # Calcul des déplacements
+        dx = 1 if enemy.x < target.x else -1 if enemy.x > target.x else 0
+        dy = 1 if enemy.y < target.y else -1 if enemy.y > target.y else 0
+
+        # Déplacer l'unité ennemie
+        if enemy.move(dx, dy, self):
+            print(f"{enemy.__class__.__name__} se déplace d'une case vers ({enemy.x}, {enemy.y}).")
+            return True  # Mouvement réussi
+        else:
+            print(f"{enemy.__class__.__name__} ne peut pas se déplacer vers ({target.x}, {target.y}).")
+            return False  # Mouvement échoué
+        
+    def handle_medic_heal(self, medic):
+        """Fait en sorte qu'un Medic soigne l'unité alliée la plus proche qui a besoin de soin."""
+        weakest_ally = None
+        min_health = float('inf')
+
+        for unit in self.enemy_units:
+            if unit.health < min_health and unit.health > 0:  # Cherche l'allié le plus faible
+                min_health = unit.health
+                weakest_ally = unit
+
+        if weakest_ally:
+            medic.handle_group_attack(self)  # Utiliser l'attaque de groupe pour soigner
+            print(f"{medic.__class__.__name__} soigne {weakest_ally.__class__.__name__} !")
+
+    def find_weakest_target(self):
+        """Trouve l'unité la plus faible dans l'équipe adverse."""
+        weakest_target = None
+        min_health = float('inf')
+
+        for unit in self.player_units:
+            if unit.health < min_health and unit.health > 0:  # Cherche l'unité la plus faible
+                min_health = unit.health
+                weakest_target = unit
+
+        return weakest_target
+
+    def hide_enemy_behind_wall(self, enemy):
+        """Fait en sorte qu'un Sniper se cache derrière un mur s'il est à proximité."""
+        # Logique pour vérifier les murs voisins et se cacher derrière si possible
+        if isinstance(enemy, Sniper):
+            enemy.hide_behind_wall(self)
+  
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def flip_display(self):
         """刷新屏幕显示"""
         self.screen.fill(BLACK)
@@ -419,13 +516,6 @@ class Game:
 
         pygame.display.flip()
     
-
-
-
-
-
-
-
 
     def show_menu(self):
         """显示游戏菜单"""
@@ -473,7 +563,7 @@ class Game:
         
 
     def show_settings(self):
-        """显示设置页面"""
+        """显示设置页面  / Afficher la page des paramètres """
         font = pygame.font.Font(None, 48)
         setting_text = font.render("Settings - Click to Return", True, (255, 255, 255))
         setting_rect = setting_text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
@@ -492,31 +582,15 @@ class Game:
             pygame.display.flip()
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     def check_victory(self):
-        """检查胜负条件"""
+        """检查胜负条件 / Vérifiez les conditions gagnantes et perdantes """
         if all(unit.health <= 0 for unit in self.enemy_units):
-            self.display_message("Victoire")  # 显示胜利信息
+            self.display_message("Victoire")  # 显示胜利信息 /Afficher les informations de victoire
             pygame.time.delay(2000)
             pygame.quit()
             exit()
         elif all(unit.health <= 0 for unit in self.player_units):
-            self.display_message("Échouer")  # 显示失败信息
+            self.display_message("Échouer")  # 显示失败信息 /Afficher le message d'échec
             pygame.time.delay(2000)
             pygame.quit()
             exit()
@@ -528,10 +602,6 @@ class Game:
         text_rect = text_surface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
         self.screen.blit(text_surface, text_rect)
         pygame.display.flip()
-
-
-
-
 
 
 def main():
@@ -565,7 +635,6 @@ def main():
     while True:
         game.handle_player_turn()
         game.handle_enemy_turn()
-
 
 
 if __name__ == "__main__":
