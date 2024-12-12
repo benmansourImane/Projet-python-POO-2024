@@ -3,7 +3,7 @@ import random
 
 # Constantes
 # 常量定义
-GRID_SIZE = 10
+GRID_SIZE = 16
 CELL_SIZE = 60
 WIDTH = GRID_SIZE * CELL_SIZE
 HEIGHT = GRID_SIZE * CELL_SIZE
@@ -87,52 +87,50 @@ class Unit:
         self.team = team  # 'player' ou 'enemy'
         self.is_selected = False
         self.image = None  # picture init null  默认图片为空
-        self.is_hidden = False  # 默认不处于隐身状态
+        self.is_hidden = False # L'unité est-elle cachée/invisible ?
 
     def move(self, dx, dy, game):
-
         if self.health <= 0:
             print(f"{self.__class__.__name__} 0 santé, incapable de bouger !")
             return False
-        """Déplacer les unités et gérer les effets de terrain"""
-        """移动单位并处理地形效果"""
+
         new_x, new_y = self.x + dx, self.y + dy
 
         # Vérifiez si la cible est dans les limites de la carte
-        # 检查目标是否在地图边界内
         if not (0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE):
             return False
 
         # Vérifiez si la cible est dans la plage de mouvement
-        # 检查目标是否在移动范围内
         if abs(dx) + abs(dy) > self.move_range:
             print(f"{self.__class__.__name__} Impossible de se déplacer vers un endroit hors de portée！")
             return False
-        
+
+        # Vérifiez si la case cible est déjà occupée
+        for unit in game.player_units + game.enemy_units:
+            if unit.x == new_x and unit.y == new_y:
+                print(f"Case ({new_x}, {new_y}) déjà occupée par {unit.__class__.__name__} !")
+                return False
+
         # Vérifier les restrictions de terrain
-        # 检查地形限制
         terrain_type = game.terrain[new_x][new_y]["type"]
         if terrain_type == "water" and isinstance(self, (Sniper, Scout)):
-            print(f"{self.__class__.__name__} La loi passe par l'eau !")
+            print(f"{self.__class__.__name__} ne peut pas traverser l'eau !")
             return False
-        
+
         # Déplacer vers un nouvel emplacement
-        # 移动到新位置
         self.x, self.y = new_x, new_y
-        
+
         # Mettre à jour le statut invisible
-        # 更新隐身状态
         self.is_hidden = terrain_type == "tree" and isinstance(self, (Sniper, Scout))
-        
-        
+
         # Traiter les effets du magma
-        # 处理岩浆效果
         if terrain_type == "lava":
             self.trigger_fire_effect(game.screen)
             self.health -= 2
             self.defense = max(0, self.defense - 1)
-            print(f"{self.__class__.__name__} Subissez des dégâts sur la lave !：{self.health}，défense值：{self.defense}")
+            print(f"{self.__class__.__name__} Subit des dégâts sur la lave : Santé {self.health}, Défense {self.defense}")
         return True
+
 
 
     def trigger_fire_effect(self, screen):
@@ -430,7 +428,10 @@ class Medic(Unit):
 
     def handle_group_attack(self, game):
         """群体攻击技能，治疗半径为2格的己方单位"""
-        """Compétence de groupe, soigner les unités alliées dans un rayon de 2 cases"""
+        """
+            Compétence de groupe : soigner les unités alliées dans un rayon de 2 cases.
+            Les unités les plus blessées sont soignées en priorité.
+        """
         affected_positions = [
             (self.x + dx, self.y + dy)
             for dx in range(-2, 3)
@@ -438,13 +439,31 @@ class Medic(Unit):
             if 0 <= self.x + dx < GRID_SIZE and 0 <= self.y + dy < GRID_SIZE and dx**2 + dy**2 <= 4
         ]
 
-        for unit in game.player_units:
-            if (unit.x, unit.y) in affected_positions:
-                unit.health += 3
-                print(f"{unit.__class__.__name__} a récupéré des points de vie dans le soin de groupe ! Vie actuelle：{unit.health}")
+        # Étape 2 : Trouver toutes les unités alliées dans cette zone d'effet
+        allies_in_range = [
+            unit for unit in game.player_units if (unit.x, unit.y) in affected_positions
+        ]
 
-        # 绘制治疗效果
-        self.draw_healing_effect(game, affected_positions)
+        # Étape 3 : Trier les unités par ordre croissant de santé pour soigner les plus blessées en premier
+        allies_in_range.sort(key=lambda unit: unit.health)
+
+        # Étape 4 : Appliquer le soin
+        # Les unités avec moins de 50% de leur santé reçoivent un soin plus important
+        for unit in allies_in_range:
+            if unit.health <= 10:  # Seuil pour considérer une unité comme "celle qui est grv blessée"
+                heal_amount = 5  # Soins importants pour les unités gravement blessées
+            else:
+                heal_amount = 3  # Soins normaux pour les autres unités 
+
+            # Augmente la santé de l'unité, sans dépasser le maximum de santé (20)
+            unit.health = min(unit.health + heal_amount, 20)
+
+            # Affiche un message pour indiquer quel allié a été soigné
+            print(f"{unit.__class__.__name__} a été soigné par le Medic ! Santé actuelle : {unit.health}")
+
+        # Étape 5 : Dessiner l'effet de soin pour les unités soignées
+        self.draw_healing_effect(game, [(unit.x, unit.y) for unit in allies_in_range])
+
     
 
     def draw_healing_effect(self, game, positions):
