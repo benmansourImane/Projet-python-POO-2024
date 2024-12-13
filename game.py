@@ -48,9 +48,6 @@ class Game:
         self.generate_bomb_zones()  # Générer les positions des bombes
 
 
-
-
-
         #己方随机3*3生成
         self.screen = screen
         self.player_units = [Pyro(random.randint(0,2), random.randint(0,2), 'player'),
@@ -108,10 +105,9 @@ class Game:
                 y = max(0, min(GRID_SIZE - 1, y))
 
         # 水eau
-        for _ in range(3):  # 水域数量 # Nombre d'eaux
-
+        for _ in range(3):  # 水域数量 # Nombre de zones d'eau
             x, y = random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1)
-            for _ in range(12):  # 水域长度
+            for _ in range(12):  # 水域长度 longueur de chaque zone d'eau
                 if not ((0 <= x < 3 and 0 <= y < 3) or (GRID_SIZE - 3 <= x < GRID_SIZE and GRID_SIZE - 3 <= y < GRID_SIZE)):
                     self.terrain[x][y] = {"type": "water", "image": random.choice(self.terrain_images["water"])}
                 x += random.choice([-1, 0, 1])
@@ -236,10 +232,6 @@ class Game:
                 self.screen.blit(surface, ((unit.x - 1) * CELL_SIZE, (unit.y - 1) * CELL_SIZE))  # Centrer sur l'ennemi
                 pygame.display.flip()
                 pygame.time.delay(50)  # Pause entre chaque frame
-
-
-    
-
 
 
 
@@ -381,9 +373,21 @@ class Game:
         if self.selected_mode == "One Player":
             units_to_control = [self.active_unit] if self.active_unit else []
         else:
+            # Mode "Group", gérer toutes les unités des joueurs
             units_to_control = self.player_units
 
+        #imane
+        # Vérification : s'assurer qu'il y a des unités à contrôler
+        if not units_to_control:
+            print("Aucune unité à contrôler.")
+            return
+
+
         while True:  # Boucle principale pour contrôler les unités
+            
+            #imane ajout
+            current_unit_index = current_unit_index % len(units_to_control)
+        
             selected_unit = units_to_control[current_unit_index]
 
             if selected_unit.health <= 0:  # Sauter les unités avec 0 de santé
@@ -444,10 +448,12 @@ class Game:
 
             # Sortir de la boucle si en mode "One Player"
             if self.selected_mode == "One Player":
+                break 
+
+             # Si toutes les unités ont joué, passer au tour des ennemis
+            if current_unit_index == len(units_to_control) - 1:
+                self.handle_enemy_turn()  # Tour des ennemis
                 break
-
-
-
 
 
     def is_target_in_range(self, enemy, target):
@@ -459,59 +465,49 @@ class Game:
         return in_range
 
     def handle_enemy_turn(self):
-        """非常简单的敌人AI逻辑。/ Logique IA ennemie très simple."""
+        """Logique IA ennemie très simple."""
         for enemy in self.enemy_units:
-            if enemy.health <= 0:  # 跳过生命值为 0 的单位 /Passer les unités avec 0 santé
+            if enemy.health <= 0:  #Passer les unités avec 0 santé
                 print(f"{enemy.__class__.__name__} est mort. Passe au prochain ennemi.")
                 continue
-            """# 随机选择目标玩家单位 / Sélectionnez au hasard les unités de joueurs cibles
-            target = random.choice(self.player_units)
-            dx = 1 if enemy.x < target.x else -1 if enemy.x > target.x else 0
-            dy = 1 if enemy.y < target.y else -1 if enemy.y > target.y else 0
 
-            # 尝试移动敌人  / # Essayez de déplacer l'ennemi
-            if enemy.move(dx, dy, self):  # 传递 game 实例 / Passer l'instance de jeu
-                # 如果移动成功，检查是否可以攻击目标 /# Si le mouvement réussit, vérifiez si la cible peut être attaquée
-                if abs(enemy.x - target.x) <= 1 and abs(enemy.y - target.y) <= 1:
-                    enemy.attack(target)
-                    if target.health <= 0:
-                        self.player_units.remove(target) """
             # Étape 1: Trouver la cible la plus proche (l'unité la plus proche de l'ennemi)
             closest_target = self.find_closest_target(enemy)
             if closest_target:
                 print(f"{enemy.__class__.__name__} a trouvé une cible : {closest_target.__class__.__name__} à ({closest_target.x}, {closest_target.y}).")
+                #Etape2: Déplace l'ennemi vers une case adjacente
+                moved = self.move_enemy_towards_target(enemy, closest_target, self)
+                if moved:
+                    print(f"{enemy.__class__.__name__} s'est déplacé vers ({enemy.x}, {enemy.y}).")
+                else:
+                    print(f"{enemy.__class__.__name__} ne peut pas se déplacer vers {closest_target.__class__.__name__}. Passe au prochain ennemi.")
+                    continue
+
+                # Etape3: Si l'ennemi est déjà adjacent à la cible, il attaque
+                if abs(enemy.x - closest_target.x) + abs(enemy.y - closest_target.y) == 1:
+                    print(f"{enemy.__class__.__name__} attaque {closest_target.__class__.__name__} !")
+                    # Appeler l'animation d'attaque avec le son
+                    enemy.draw_enemy_attack(self, closest_target)
+                    # Infliger des dégâts
+                    closest_target.take_damage(enemy.attack_power, "melee")  # Appliquer des dégâts de type "melee"
+                    if closest_target.health <= 0:
+                        print(f"{closest_target.__class__.__name__} est mort. Retiré des unités du joueur.")
+                        self.player_units.remove(closest_target)
+
             else:
                 print(f"{enemy.__class__.__name__} n'a trouvé aucune cible.")
                 continue
-
-            # Étape 2: Se déplacer vers la cible si elle est à portée de mouvement
-            if self.move_enemy_towards_target(enemy, closest_target):
-                print(f"{enemy.__class__.__name__} se déplace vers ({enemy.x}, {enemy.y}).")
-            else:
-                print(f"{enemy.__class__.__name__} ne peut pas se déplacer vers {closest_target.__class__.__name__}. Passe au prochain ennemi.")
-                continue
-
-            # Étape 3: Si l'ennemi est à portée d'attaque, attaquer
-            if self.is_target_in_range(enemy, closest_target):
-                print(f"{enemy.__class__.__name__} attaque {closest_target.__class__.__name__} à ({closest_target.x}, {closest_target.y}) !")
-                enemy.attack(closest_target)
-                if closest_target.health <= 0:
-                    print(f"{closest_target.__class__.__name__} est mort. Retiré des unités du joueur.")
-        
-                    self.player_units.remove(closest_target)
        
-        # Étape 3: Vérifier si l'ennemi entre dans une zone de bombe
+        # Étape 4: Vérifier si l'ennemi entre dans une zone de bombe
         self.handle_bomb_zones(enemy)
 
-      # Étape 4: Si toujours en vie, attaquer la cible
+      # Étape 5: Si toujours en vie, attaquer la cible
         if enemy in self.enemy_units and self.is_target_in_range(enemy, closest_target):
             print(f"{enemy.__class__.__name__} attaque {closest_target.__class__.__name__} à ({closest_target.x}, {closest_target.y}) !")
             enemy.attack(closest_target)
             if closest_target.health <= 0:
                 print(f"{closest_target.__class__.__name__} est mort. Retiré des unités du joueur.")
                 self.player_units.remove(closest_target)
-
-
 
         self.check_victory()  # 检查胜负条件 / # Vérifiez les conditions gagnantes et perdantes
 
@@ -533,23 +529,49 @@ class Game:
             print(f"{enemy.__class__.__name__} ne trouve aucune cible valide.")
         return closest_target
     
-    def move_enemy_towards_target(self, enemy, target):
-        """Déplace l'ennemi vers la cible la plus proche."""
+    def move_enemy_towards_target(self, enemy, target, game):
+        """
+        Déplace un ennemi vers une case adjacente à la cible (joueur), et s'arrête avant d'entrer sur la même case.
+        """
         if target is None:
-            print(f"{enemy.__class__.__name__} n'a pas de cible vers laquelle se déplacer.")
+            print(f"{enemy.__class__.__name__} n'a pas de cible valide.")
             return False  # Aucun objectif à atteindre
 
-        # Calcul des déplacements
-        dx = 1 if enemy.x < target.x else -1 if enemy.x > target.x else 0
-        dy = 1 if enemy.y < target.y else -1 if enemy.y > target.y else 0
+        # Directions possibles : haut, bas, gauche, droite
+        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        random.shuffle(directions)  # Mélange pour ajouter un peu d'aléatoire
 
-        # Déplacer l'unité ennemie
-        if enemy.move(dx, dy, self):
-            print(f"{enemy.__class__.__name__} se déplace d'une case vers ({enemy.x}, {enemy.y}).")
-            return True  # Mouvement réussi
-        else:
-            print(f"{enemy.__class__.__name__} ne peut pas se déplacer vers ({target.x}, {target.y}).")
-            return False  # Mouvement échoué
+        for dx, dy in directions:
+            new_x, new_y = enemy.x + dx, enemy.y + dy
+             # Vérifiez que la nouvelle position est dans les limites
+            if not (0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE):
+                continue
+            
+            # Vérifiez que la case est une case adjacente au joueur (évite d'entrer sur la même case)
+            if abs(new_x - target.x) + abs(new_y - target.y) != 1:
+                continue
+
+            # Vérifiez le type de terrain
+            terrain_type = game.terrain[new_x][new_y]["type"]
+            if terrain_type == "wall":
+                continue  # Ne traverse pas les mur
+
+            if terrain_type == "water" and enemy.team == "enemy":
+                print(f"{enemy.__class__.__name__} traverse l'eau pour atteindre {target.__class__.__name__}.")
+                enemy.health -= 3  # Applique des dégâts pour traverser l'eau
+                print(f"{enemy.__class__.__name__} a maintenant {enemy.health} PV.")
+
+            # Vérifiez que la case n'est pas occupée
+            if any(unit.x == new_x and unit.y == new_y for unit in game.player_units + game.enemy_units):
+                continue
+
+            # Déplacer l'ennemi vers la nouvelle case
+            enemy.x, enemy.y = new_x, new_y
+            print(f"{enemy.__class__.__name__} s'est déplacé vers ({enemy.x}, {enemy.y}) pour atteindre {target.__class__.__name__}.")
+            return True
+
+        print(f"{enemy.__class__.__name__} ne peut pas se déplacer vers {target.__class__.__name__}.")
+        return False
         
     def handle_medic_heal(self, medic):
         """Fait en sorte qu'un Medic soigne l'unité alliée la plus proche qui a besoin de soin."""
@@ -582,22 +604,6 @@ class Game:
         # Logique pour vérifier les murs voisins et se cacher derrière si possible
         if isinstance(enemy, Sniper):
             enemy.hide_behind_wall(self)
-  
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     def flip_display(self):
         """刷新屏幕显示"""
@@ -637,7 +643,6 @@ class Game:
 
         pygame.display.flip()
     
-
     def show_menu(self):
         """Afficher le menu principal du jeu."""
         bg_image = pygame.image.load("pic/bg.jpg")
@@ -691,11 +696,7 @@ class Game:
                     self.active_unit = unit
                     break
         else:
-            self.active_unit = None  # Aucune unité active, toutes sont jouables.
-
-
-
-            
+            self.active_unit = None  # Aucune unité active, toutes sont jouables.     
 
     def show_settings(self):
         """Afficher le menu des paramètres permettant de sélectionner le mode et l'unité."""
@@ -763,11 +764,6 @@ class Game:
         text_rect = text_surface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
         self.screen.blit(text_surface, text_rect)
         pygame.display.flip()
-
-
-
-
-
 
 
 def show_loading_screen(screen):

@@ -2,8 +2,7 @@ import pygame
 import random
 
 # Constantes
-# 常量定义
-GRID_SIZE = 16
+GRID_SIZE = 10
 CELL_SIZE = 60
 WIDTH = GRID_SIZE * CELL_SIZE
 HEIGHT = GRID_SIZE * CELL_SIZE
@@ -13,6 +12,12 @@ BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 BLUE = (0, 0, 255)
 GREEN = (0, 255, 0)
+
+pygame.init()
+pygame.mixer.init()  # Initialisation du module audio
+# Charger le son de coup de feu
+gunshot_sound = pygame.mixer.Sound("gunshot.wav")
+gunshot_sound.set_volume(0.5)  # Ajuster le volume à 50%
 
 
 class Unit:
@@ -88,16 +93,42 @@ class Unit:
         self.is_selected = False
         self.image = None  # picture init null  默认图片为空
         self.is_hidden = False # L'unité est-elle cachée/invisible ?
+        #imane
+        # Ajout des faiblesses et résistances
+        self.weakness = []  # Liste des types ou éléments faibles
+        self.resistance = []  # Liste des types ou éléments résistants
+
+    def take_damage(self, damage, attack_type):
+        """
+        Réduit la santé de l'unité en fonction des dégâts subis et de ses faiblesses/résistances.
+        """
+        # Augmenter les dégâts si l'unité est faible contre ce type d'attaque
+        if attack_type in self.weakness:
+            damage *= 1.5  # 50% de dégâts supplémentaires
+            print(f"{self.__class__.__name__} est faible contre {attack_type} ! Dégâts augmentés à {damage}.")
+
+        # Réduire les dégâts si l'unité est résistante contre ce type d'attaque
+        if attack_type in self.resistance:
+            damage *= 0.5  # 50% de dégâts en moins
+            print(f"{self.__class__.__name__} résiste à {attack_type} ! Dégâts réduits à {damage}.")
+
+        # Appliquer les dégâts
+        self.health -= max(0, int(damage))
+        print(f"{self.__class__.__name__} a maintenant {self.health} PV.")
+
+
 
     def move(self, dx, dy, game):
         if self.health <= 0:
             print(f"{self.__class__.__name__} 0 santé, incapable de bouger !")
             return False
 
+        #nouvelle position calculée
         new_x, new_y = self.x + dx, self.y + dy
 
         # Vérifiez si la cible est dans les limites de la carte
         if not (0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE):
+            print("Position hors limites.")
             return False
 
         # Vérifiez si la cible est dans la plage de mouvement
@@ -117,9 +148,28 @@ class Unit:
             print(f"{self.__class__.__name__} ne peut pas traverser l'eau !")
             return False
 
+        # Vérifier le type de terrain: si le terrain est mur, les ennemis ne peuvent pas entrer dedans
+        terrain_type = game.terrain[new_x][new_y]["type"]
+        if self.team == "enemy" and terrain_type in ["wall"]:  # Les ennemis ne peuvent pas entrer
+            print(f"{self.__class__.__name__} ne peut pas traverser {terrain_type}.")
+            return False
+
+        #imane
+        if terrain_type == "water":
+            if self.team == "enemy":
+                print(f"{self.__class__.__name__} traverse l'eau et subit des dégâts !")
+                self.health -= 3  # Réduit la santé de l'ennemi lorsqu'il traverse l'eau
+                print(f"{self.__class__.__name__} a maintenant {self.health} PV après avoir traversé l'eau.")
+            else:
+                print(f"{self.__class__.__name__} (joueur) ne peut pas traverser l'eau.")
+                return False
+
+        #imane
+
         # Déplacer vers un nouvel emplacement
         self.x, self.y = new_x, new_y
-
+        #print(f"{self.__class__.__name__} s'est déplacé vers ({self.x}, {self.y}).")
+    
         # Mettre à jour le statut invisible
         self.is_hidden = terrain_type == "tree" and isinstance(self, (Sniper, Scout))
 
@@ -130,6 +180,8 @@ class Unit:
             self.defense = max(0, self.defense - 1)
             print(f"{self.__class__.__name__} Subit des dégâts sur la lave : Santé {self.health}, Défense {self.defense}")
         return True
+    
+        
 
 
 
@@ -184,12 +236,37 @@ class Unit:
         
           # Dessiner la balle à la position calculée
            pygame.draw.circle(game.screen, bullet_color, (int(current_x), int(current_y)), 5)
-
            # Rafraîchir l'affichage après chaque itération
            pygame.display.flip()
-
           # Délai pour contrôler la vitesse de l'animation
            pygame.time.delay(30)  # Ajuste ce délai pour ajuster la vitesse de l'animation 
+
+    def draw_enemy_attack(self, game, target):
+        """
+        Dessine une animation spécifique pour les attaques ennemies avec un son de coup de feu.
+        """
+        attack_color = (255, 0, 0)  # Rouge vif pour représenter l'attaque ennemie
+        enemy_x, enemy_y = self.x * CELL_SIZE + CELL_SIZE // 2, self.y * CELL_SIZE + CELL_SIZE // 2
+        target_x, target_y = target.x * CELL_SIZE + CELL_SIZE // 2, target.y * CELL_SIZE + CELL_SIZE // 2
+
+        # Jouer le son de coup de feu
+        gunshot_sound.play()
+
+        # Animation : ligne rouge allant vers la cible
+        for i in range(15):
+            pygame.draw.line(
+                game.screen, attack_color,
+                (enemy_x, enemy_y),
+                (enemy_x + (target_x - enemy_x) * i / 15, enemy_y + (target_y - enemy_y) * i / 15),
+                3
+            )
+            pygame.display.flip()
+            pygame.time.delay(20)
+
+        # Effacer l'animation après l'effet
+        pygame.display.update()  # Rafraîchit l'écran
+    
+           
 
     def attack(self, target):
     # Vérifie si l'unité est cachée, dans ce cas elle ne peut pas attaquer
@@ -235,7 +312,31 @@ class Unit:
                 (self.x * CELL_SIZE + CELL_SIZE // 2, self.y * CELL_SIZE + CELL_SIZE // 2), 
                 CELL_SIZE // 3
             )
-        
+        # Définir les dimensions du rectangle de base (représente l'unité)
+        rect = pygame.Rect(
+            self.x * CELL_SIZE + CELL_SIZE // 4,  # Position X
+            self.y * CELL_SIZE + CELL_SIZE // 4,  # Position Y
+            CELL_SIZE // 2,  # Largeur
+            CELL_SIZE // 2   # Hauteur
+        )
+
+                # Dessiner la bordure rouge uniquement pour les ennemis
+        if self.team == 'enemy':
+            pygame.draw.rect(
+                screen,
+                (255, 0, 0),  # Rouge
+                pygame.Rect(
+                    self.x * CELL_SIZE,       # Position X
+                    self.y * CELL_SIZE,       # Position Y
+                    CELL_SIZE,                # Largeur du carré
+                    CELL_SIZE                 # Hauteur du carré
+                ),
+                2  # Épaisseur de la bordure uniquement
+            )
+
+
+
+
         # 血量条参数
         health_bar_width = CELL_SIZE - 4
         health_bar_height = 5
@@ -295,6 +396,9 @@ class Pyro(Unit):
         self.move_range = 1
         self.image = pygame.image.load("pic/Pyro.webp")
         self.image = pygame.transform.scale(self.image, (CELL_SIZE, CELL_SIZE))
+        #imane sys faiblesse
+        self.weakness = ["water"]  # Faible contre l'eau
+        self.resistance = ["fire"]  # Résistant au feu
 
     
     def handle_single_attack(self, game):
@@ -322,6 +426,13 @@ class Pyro(Unit):
                             "type": "lava",
                             "image": game.terrain_images["lava"],
                         }
+                        #debut modi
+                        # Inflige des dégâts aux unités dans la zone ciblée
+                        for unit in game.player_units + game.enemy_units:
+                            if (unit.x, unit.y) == (grid_x, grid_y):
+                                unit.take_damage(10, "fire")  # Appel à take_damage
+                                print(f"{unit.__class__.__name__} a été touché par la lave ! Vie restante：{unit.health}")
+                        #fin modi
                         running = False
                 elif event.type == pygame.QUIT:
                     pygame.quit()
@@ -332,8 +443,6 @@ class Pyro(Unit):
 
     def handle_group_attack(self, game):
         """Compétence d'attaque de groupe"""
-
-        """群体攻击技能"""
         affected_positions = [
             (self.x + dx, self.y + dy)
             for dx in range(-3, 4)
@@ -341,14 +450,13 @@ class Pyro(Unit):
             if 0 <= self.x + dx < GRID_SIZE and 0 <= self.y + dy < GRID_SIZE and dx**2 + dy**2 <= 4
         ]
         # Infliger des dégâts à toutes les unités dans la zone d'effet
-        # 对范围内的所有单位造成伤害
         for unit in game.player_units + game.enemy_units:
             if (unit.x, unit.y) in affected_positions:
-                unit.health -= 5
+                unit.take_damage(8, "fire")  # Appel à take_damage avec type "fire"
+                #unit.health -= 5
                 print(f"{unit.__class__.__name__} a été blessé par l'attaque de groupe ! Vie restante：{unit.health}")
 
         # Dessiner l'effet d'explosion
-        # 绘制爆炸效果
        
         self.draw_explosion_effect(game, affected_positions)
 
@@ -389,6 +497,8 @@ class Medic(Unit):
         self.move_range = 2
         self.image = pygame.image.load("pic/Medic.webp")
         self.image = pygame.transform.scale(self.image, (CELL_SIZE, CELL_SIZE))
+        self.weakness = ["melee"]  # Faible contre les attaques au corps à corps
+        self.resistance = ["poison"]  # Résistant aux effets de poison
 
     def handle_single_attack(self, game):
         """单一攻击技能，向不超过3格的敌人发射子弹"""
@@ -415,16 +525,14 @@ class Medic(Unit):
                     for enemy in valid_targets:
                         if (enemy.x, enemy.y) == (grid_x, grid_y):
                             self.draw_bullet(game, enemy)
-                            enemy.health -= 5
+                            #enemy.health -= 5
+                            enemy.take_damage(5, "ranged")
                             print(f"{enemy.__class__.__name__}  a été touché par l'attaque unique de Medic ! Vie restante：{enemy.health}")
                             running = False
                             break
                 elif event.type == pygame.QUIT:
                     pygame.quit()
                     exit()
-    
-    
-    
 
     def handle_group_attack(self, game):
         """群体攻击技能，治疗半径为2格的己方单位"""
@@ -456,6 +564,7 @@ class Medic(Unit):
                 heal_amount = 3  # Soins normaux pour les autres unités 
 
             # Augmente la santé de l'unité, sans dépasser le maximum de santé (20)
+            max_health = 20
             unit.health = min(unit.health + heal_amount, 20)
 
             # Affiche un message pour indiquer quel allié a été soigné
@@ -497,6 +606,9 @@ class Sniper(Unit):
         self.image = pygame.image.load("pic/Sniper.webp")
         self.image = pygame.transform.scale(self.image, (CELL_SIZE, CELL_SIZE))
 
+        self.weakness = ["melee"]  # Faible contre les attaques au corps à corps
+        self.resistance = []  # Pas de résistance particulière
+
     def handle_single_attack(self, game):
         """Compétence d'attaque unique du Sniper, tirer sur l'ennemi le plus proche"""
         """Sniper 的单一攻击技能，朝最近的敌人发射子弹"""
@@ -511,13 +623,14 @@ class Sniper(Unit):
         
         # Trouver l'ennemi le plus proche
         # 找到最近的敌人
-        target = min(valid_targets, key=lambda enemy: (enemy.x - self.x) ** 2 + (enemy.y - self.y) ** 2)
+        closest_target = min(valid_targets, key=lambda enemy: (enemy.x - self.x) ** 2 + (enemy.y - self.y) ** 2)
 
         # Dessiner l'effet de balle
         # 绘制子弹效果
-        self.draw_bullet(game, target)
-        target.health -= 4  # Sniper 攻击力较高
-        print(f"{target.__class__.__name__} a été touché par l'attaque unique du Sniper ! Vie restante：{target.health}")
+        self.draw_bullet(game, closest_target)
+        #target.health -= 4  # Sniper 攻击力较高
+        closest_target.take_damage(8, "ranged")
+        print(f"{closest_target.__class__.__name__} a été touché par l'attaque unique du Sniper ! Vie restante：{closest_target.health}")
 
     
     def handle_group_attack(self, game):
@@ -608,6 +721,9 @@ class Scout(Unit):
         self.move_range = 4
         self.image = pygame.image.load("pic/Scout.webp")
         self.image = pygame.transform.scale(self.image, (CELL_SIZE, CELL_SIZE))
+        self.weakness = ["ranged"]  # Faible contre les attaques à distance
+        self.resistance = ["melee"]  # Résistant aux attaques au corps à corps
+
 
     def handle_single_attack(self, game):
         """Scout 的单一攻击技能，发射霰弹攻击半径 2 格内的最近敌人"""
@@ -622,17 +738,23 @@ class Scout(Unit):
             return
 
         # 找到最近的敌人
-        target = min(valid_targets, key=lambda enemy: (enemy.x - self.x) ** 2 + (enemy.y - self.y) ** 2)
+        closest_target = min(valid_targets, key=lambda enemy: (enemy.x - self.x) ** 2 + (enemy.y - self.y) ** 2)
 
-        # 发射 5 枚子弹
+        # Tirer 5 balles
+        total_damage = 0
         for _ in range(5):
-            self.draw_spread_bullet(game, target)
+            self.draw_spread_bullet(game, closest_target)
+            total_damage += 1  # Chaque balle inflige 1 point de dégâts
 
-        # 总计伤害
-        damage = 1 * 5  # 每颗子弹 1 点伤害，总计 5 点
+         # Appliquer les dégâts totaux en tenant compte des faiblesses/résistances
+        closest_target.take_damage(total_damage, "melee")  # Type d'attaque "melee"
+        print(f"{closest_target.__class__.__name__} touché par l'attaque au fusil de chasse du Scout ! Santé restante：{closest_target.health}")
+        
+        """
+        damage = 1 * 5 
         target.health -= damage
         print(f"{target.__class__.__name__} Touché par l'attaque au fusil de chasse de Scout ! Santé restante：{target.health}")
-
+        """
 
     #shortgun!
     def draw_spread_bullet(self, game, target):
@@ -657,20 +779,22 @@ class Scout(Unit):
 
 
     def handle_group_attack(self, game):
-        """Scout 的群体技能，释放迷惑烟雾降低敌人攻击力"""
+        # Définir la zone d'effet
         affected_positions = [
             (self.x + dx, self.y + dy)
             for dx in range(-2, 3)
             for dy in range(-2, 3)
             if 0 <= self.x + dx < GRID_SIZE and 0 <= self.y + dy < GRID_SIZE and dx**2 + dy**2 <= 4
         ]
-
+        # Réduire la puissance d'attaque des ennemis dans la zone d'effet
         for enemy in game.enemy_units:
             if (enemy.x, enemy.y) in affected_positions:
+                #modi 1 ligne
+                original_attack_power = enemy.attack_power
                 enemy.attack_power = max(0, enemy.attack_power - 2)
                 print(f"{enemy.__class__.__name__} La puissance d'attaque de a été réduite de 2 points ! Puissance d'attaque actuelle：{enemy.attack_power}")
 
-        # 绘制迷惑烟雾效果
+        # Afficher l'effet visuel de fumée
         self.draw_smoke_effect(game, affected_positions)
 
     def draw_smoke_effect(self, game, positions):
