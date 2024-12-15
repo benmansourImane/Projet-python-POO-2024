@@ -389,21 +389,16 @@ class Unit:
             )
 
 
-
-
-        # 血量条参数
         health_bar_width = CELL_SIZE - 4
         health_bar_height = 5
         health_bar_x = self.x * CELL_SIZE + 2
         health_bar_y = self.y * CELL_SIZE - health_bar_height - 2
 
-        # 防御条参数
         defense_bar_width = CELL_SIZE - 4
         defense_bar_height = 5
         defense_bar_x = self.x * CELL_SIZE + 2
         defense_bar_y = health_bar_y - defense_bar_height - 2
 
-        # 绘制血量条
         health_ratio = max(self.health, 0) / 20  # 假设满血为20
         pygame.draw.rect(screen, (0, 0, 0), (health_bar_x, health_bar_y, health_bar_width, health_bar_height))  # 背景
         pygame.draw.rect(screen, (255, 0, 0), (health_bar_x, health_bar_y, health_bar_width * health_ratio, health_bar_height))  # 当前血量
@@ -428,7 +423,6 @@ class Unit:
                     pygame.draw.rect(surface, blue, rect)
 
         screen.blit(surface, (0, 0))
-
 
     def get_vision(self):
         """计算单位的视野范围"""

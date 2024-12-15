@@ -687,7 +687,6 @@ class Game:
         """刷新屏幕显示"""
         self.screen.fill(BLACK)
 
-        # 绘制网格和地形
         for x in range(GRID_SIZE):
             for y in range(GRID_SIZE):
                 terrain = self.terrain[x][y]
@@ -1003,10 +1002,6 @@ class Game:
                     self.screen.blit(stat_text, (panel_x + padding + unit_image_size + 10, y_offset + 30 + i * 25))
 
 
-
-
-
-
     def display_message(self, message):
         """Afficher un message temporaire au centre de l'écran."""
         font = pygame.font.Font(None, 64)
@@ -1069,16 +1064,6 @@ def show_loading_screen(screen):
 
 
 
-
-    
-
-
-
-
-
-
-
-
 def main():
     pygame.init()
 
@@ -1092,7 +1077,6 @@ def main():
     # Lecture de la musique en boucle infinie (-1 signifie une boucle infinie)
     pygame.mixer.music.play(-1)
 
-    # 初始化窗口
     #Initialiser la fenêtre
     screen = pygame.display.set_mode((WIDTH+250, HEIGHT))
     pygame.display.set_caption("Mon jeu avec panneau d'informations")
@@ -1116,9 +1100,6 @@ def main():
         game.handle_player_turn()
         game.handle_enemy_turn()
 
-
 if __name__ == "__main__":
 
     main()
-
-
