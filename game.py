@@ -489,9 +489,9 @@ class Game:
                            print(f"{selected_unit.__class__.__name__} s'est déplacé à ({selected_unit.x}, {selected_unit.y}).")
                            has_acted = True
                             # Ouvrir le menu pause avec ESCAPE
-                        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                            self.pause_menu()  # Affiche le menu pause
-                            self.flip_display()
+                    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                        self.pause_menu()  # Affiche le menu pause
+                        self.flip_display()
                     # Changer d'unité avec la barre d'espace (mode Group uniquement)
                     if self.selected_mode == "Group" and event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                         selected_unit.is_selected = False

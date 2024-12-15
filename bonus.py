@@ -1,7 +1,6 @@
 import pygame
 from abc import ABC, abstractmethod
 
-
 class BonusItem(ABC):
     """
     Classe abstraite représentant un bonus générique dans le jeu.
@@ -32,7 +31,6 @@ class BonusItem(ABC):
                 (255, 255, 0),  # Jaune comme couleur par défaut
                 pygame.Rect(self.x * 60, self.y * 60, 60, 60)  # CELL_SIZE = 60
             )
-
 
 
 class AttackBoost(BonusItem):

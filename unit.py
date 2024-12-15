@@ -141,6 +141,7 @@ class Unit:
             default_image = pygame.Surface((CELL_SIZE, CELL_SIZE))
             default_image.fill((100, 100, 100))  # Gris par défaut
             return default_image
+        
     def move(self, dx, dy, game):
         if self.health <= 0:
             print(f"{self.__class__.__name__} 0 santé, incapable de bouger !")
