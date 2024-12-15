@@ -2,6 +2,10 @@ import pygame
 import random
 
 from unit import *
+from bonus import AttackBoost, DefenseBoost
+
+
+
 
 
 class Game:
@@ -73,13 +77,17 @@ class Game:
             "wall": pygame.transform.scale(pygame.image.load("pic/mur.png"), (CELL_SIZE, CELL_SIZE)) ,  # Nouveau type de terrain : mur
 
          }
+        self.bonus_items = []  # Liste pour stocker les bonus
+        
+        self.generate_bonus_items()  # Générer les bonus dès l'initialisation
+
         
         self.selected_mode = "One Player"
         self.selected_unit = "Pyro"
         self.active_unit = None
         self.generate_map()
 
-
+    
 
     def generate_map(self):
         # 草地prairie
@@ -147,9 +155,54 @@ class Game:
             x += random.choice([-1, 0, 1])
             y += random.choice([-1, 0, 1])
             x = max(0, min(GRID_SIZE - 1, x))  # Garde x dans les limites de la grille
-            y = max(0, min(GRID_SIZE - 1, y))  # Garde y dans les limites de la grille
+            y = max(0, min(GRID_SIZE - 1, y))  # Garde y dans les limites de la 
+            
+
+    def generate_bonus_items(self):
+        """Créer des objets bonus spécifiques sur le terrain."""
+        for _ in range(3):  # Générer 3 bonus d'attaque
+            x, y = random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1)
+            bonus = AttackBoost(x, y)  # Instancie la sous-classe AttackBoost
+            self.bonus_items.append(bonus)
+            print(f"Bonus d'attaque généré à la position ({bonus.x}, {bonus.y})")
+
+        for _ in range(4):  # Générer 4 bonus de défense
+            x, y = random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1)
+            bonus = DefenseBoost(x, y)  # Instancie la sous-classe DefenseBoost
+            self.bonus_items.append(bonus)
+            print(f"Bonus de défense généré à la position ({bonus.x}, {bonus.y})")
+
+    #ramasser les bonus 
+    def handle_bonus_items(self, unit):
+        """Gérer les objets ramassés par une unité."""
+        for item in self.bonus_items[:]:  # Crée une copie pour éviter les erreurs lors de la suppression
+            if (unit.x, unit.y) == (item.x, item.y):  # Vérifiez si l'unité est sur le bonus
+                item.apply_bonus(unit)  # Appelle la méthode polymorphique de la sous-classe
+                print(f"{unit.__class__.__name__} a ramassé un {item.__class__.__name__} !")
+                
+                # Ajouter un feedback visuel (optionnel)
+                self.display_bonus_effect(item, f"Bonus appliqué !")
+                
+                # Retirer le bonus de la carte
+                self.bonus_items.remove(item)
+                break
+
+    def display_bonus_effect(self, item, message):
+        """Afficher un effet visuel temporaire pour un bonus."""
+        font = pygame.font.Font(None, 36)
+        text = font.render(message, True, (0, 255, 0))  # Texte vert
+        text_rect = text.get_rect(center=(item.x * CELL_SIZE + CELL_SIZE // 2, item.y * CELL_SIZE + CELL_SIZE // 2))
+        self.screen.blit(text, text_rect)
+        pygame.display.flip()
+        pygame.time.delay(500)  # Affiche pendant 500ms
 
     
+   
+
+
+
+
+
 
     def generate_health_zones(self):
         """Générer des zones de santé aléatoires sur la carte."""
@@ -365,6 +418,14 @@ class Game:
         self.screen.blit(fog_surface, (0, 0))
 
 
+
+    def reset_actions(self):
+        """Réinitialiser le nombre d'actions pour chaque unité au début du tour."""
+        for unit in self.player_units + self.enemy_units:
+            if unit.health > 0:  # Ne réinitialiser que pour les unités vivantes
+                unit.actions_left = 1
+
+
     def handle_player_turn(self):
         """Gérer le tour du joueur avec les flèches pour bouger, espace pour changer d'unité (mode Group uniquement)."""
         current_unit_index = 0  # Index de l'unité actuellement contrôlée
@@ -374,23 +435,23 @@ class Game:
             units_to_control = [self.active_unit] if self.active_unit else []
         else:
             # Mode "Group", gérer toutes les unités des joueurs
-            units_to_control = self.player_units
+            units_to_control = [unit for unit in self.player_units if unit.health > 0]
 
-        #imane
         # Vérification : s'assurer qu'il y a des unités à contrôler
         if not units_to_control:
             print("Aucune unité à contrôler.")
             return
 
+        # Initialisation d'un drapeau pour vérifier si toutes les unités ont agi
+        units_have_acted = [False] * len(units_to_control)
 
-        while True:  # Boucle principale pour contrôler les unités
-            
-            #imane ajout
+        while not all(units_have_acted):  # Continue tant que toutes les unités n'ont pas agi
             current_unit_index = current_unit_index % len(units_to_control)
-        
             selected_unit = units_to_control[current_unit_index]
 
-            if selected_unit.health <= 0:  # Sauter les unités avec 0 de santé
+            # Ignorer les unités avec 0 de santé
+            if selected_unit.health <= 0:
+                units_have_acted[current_unit_index] = True
                 current_unit_index = (current_unit_index + 1) % len(units_to_control)
                 continue
 
@@ -404,112 +465,172 @@ class Game:
                         pygame.quit()
                         exit()
 
-                    # Affiche la portée de mouvement
+                    # Afficher la portée de mouvement
                     selected_unit.draw_move_range(self.screen, self)
                     pygame.display.flip()
 
-                    # Déplacement avec les flèches directionnelles
-                    if event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_UP:  # Haut
-                            if selected_unit.move(0, -1, self):
-                                has_acted = True
-                        if event.key == pygame.K_DOWN:  # Bas
-                            if selected_unit.move(0, 1, self):
-                                has_acted = True
-                        if event.key == pygame.K_LEFT:  # Gauche
-                            if selected_unit.move(-1, 0, self):
-                                has_acted = True
-                        if event.key == pygame.K_RIGHT:  # Droite
-                            if selected_unit.move(1, 0, self):
-                                has_acted = True
+                    # Clic droit pour ouvrir le menu des compétences
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+                        self.handle_skill_menu(selected_unit)
+                        self.flip_display()
+                    
+                    # Clic gauche pour déplacer les unités
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        mouse_x, mouse_y = pygame.mouse.get_pos()
+                        grid_x, grid_y = mouse_x // CELL_SIZE, mouse_y // CELL_SIZE
 
+                        dx, dy = grid_x - selected_unit.x, grid_y - selected_unit.y
+                        distance = abs(dx) + abs(dy)
+                        # Vérifier si le mouvement est hors de portée
+                        if distance > selected_unit.move_range:
+                            print(f"{selected_unit.__class__.__name__} : Mouvement hors de portée (limite : {selected_unit.move_range}).")
+                            continue
+                        if selected_unit.move(dx, dy, self):
+                           print(f"{selected_unit.__class__.__name__} s'est déplacé à ({selected_unit.x}, {selected_unit.y}).")
+                           has_acted = True
+                            # Ouvrir le menu pause avec ESCAPE
+                        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                            self.pause_menu()  # Affiche le menu pause
+                            self.flip_display()
                     # Changer d'unité avec la barre d'espace (mode Group uniquement)
                     if self.selected_mode == "Group" and event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                         selected_unit.is_selected = False
                         current_unit_index = (current_unit_index + 1) % len(units_to_control)
                         has_acted = True
 
-                    # Attaquer avec le clic droit de la souris (compétences comme avant)
-                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:  # Clic droit
-                        self.handle_skill_menu(selected_unit)  # Ouvre le menu des compétences
-                        self.flip_display()
-                        has_acted = True
+                    # Logique des mouvements avec les touches fléchées
+                    if event.type == pygame.KEYDOWN:
+                        dx, dy = 0, 0
+                        if event.key == pygame.K_UP:
+                            dy = -1
+                        elif event.key == pygame.K_DOWN:
+                            dy = 1
+                        elif event.key == pygame.K_LEFT:
+                            dx = -1
+                        elif event.key == pygame.K_RIGHT:
+                            dx = 1
+                    # Vérifier si le mouvement est hors de portée
+                        distance = abs(dx) + abs(dy)
+                        if distance > selected_unit.move_range:
+                            print(f"Mouvement hors de portée pour {selected_unit.__class__.__name__}.")
+                            continue
 
-            # self.handle_health_zones(selected_unit) est placé après que l'unité ait agi 
-            # garantit que le joueur termine son action avant que la santé ne soit augmentée.
+                        # Déplacer l'unité
+                        if selected_unit.move(dx, dy, self):
+                            print(f"{selected_unit.__class__.__name__} s'est déplacé à ({selected_unit.x}, {selected_unit.y}).")
+                            has_acted = True
+                            self.handle_enemy_reaction(selected_unit)
+                        # Attaquer avec le clic droit
+                        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+                            self.handle_skill_menu(selected_unit)
+                            self.flip_display()
+                            has_acted = True
 
             # Vérifie si l'unité entre dans une zone de santé
             self.handle_health_zones(selected_unit)
             # Désélectionner l'unité après son action
             selected_unit.is_selected = False
+            # Marquer l'unité comme ayant agi
+            units_have_acted[current_unit_index] = True
 
             # Vérifier les conditions de victoire après chaque action
             self.check_victory()
 
-            # Sortir de la boucle si en mode "One Player"
-            if self.selected_mode == "One Player":
-                break 
+            # Passer à l'unité suivante
+            current_unit_index = (current_unit_index + 1) % len(units_to_control)
 
-             # Si toutes les unités ont joué, passer au tour des ennemis
-            if current_unit_index == len(units_to_control) - 1:
-                self.handle_enemy_turn()  # Tour des ennemis
-                break
-
-
-    def is_target_in_range(self, enemy, target):
-        """Vérifie si la cible est à portée de l'ennemi. La portée dépend de l'attribut `attack_range` de l'unité."""
-        # On vérifie que la distance Manhattan est inférieure ou égale à la portée d'attaque
-        attack_range = getattr(enemy, "attack_range", 1)  # Valeur par défaut : 1
-        in_range = abs(enemy.x - target.x) + abs(enemy.y - target.y) <= attack_range
-        print(f"{enemy.__class__.__name__} vérifie si {target.__class__.__name__} est à portée : {'Oui' if in_range else 'Non'}.")
-        return in_range
+        # Une fois toutes les unités du joueur terminées, lancer le tour des ennemis
+        self.check_victory()  # Vérifiez une dernière fois avant de passer aux ennemis
+        self.handle_enemy_turn()
+       
 
     def handle_enemy_turn(self):
-        """Logique IA ennemie très simple."""
+        """Logique améliorée pour les ennemis."""
         for enemy in self.enemy_units:
-            if enemy.health <= 0:  #Passer les unités avec 0 santé
+            # Ignorer les ennemis déjà morts
+            if enemy.health <= 0:
                 print(f"{enemy.__class__.__name__} est mort. Passe au prochain ennemi.")
                 continue
 
-            # Étape 1: Trouver la cible la plus proche (l'unité la plus proche de l'ennemi)
-            closest_target = self.find_closest_target(enemy)
-            if closest_target:
-                print(f"{enemy.__class__.__name__} a trouvé une cible : {closest_target.__class__.__name__} à ({closest_target.x}, {closest_target.y}).")
-                #Etape2: Déplace l'ennemi vers une case adjacente
-                moved = self.move_enemy_towards_target(enemy, closest_target, self)
-                if moved:
-                    print(f"{enemy.__class__.__name__} s'est déplacé vers ({enemy.x}, {enemy.y}).")
-                else:
-                    print(f"{enemy.__class__.__name__} ne peut pas se déplacer vers {closest_target.__class__.__name__}. Passe au prochain ennemi.")
-                    continue
-
-                # Etape3: Si l'ennemi est déjà adjacent à la cible, il attaque
-                if abs(enemy.x - closest_target.x) + abs(enemy.y - closest_target.y) == 1:
-                    print(f"{enemy.__class__.__name__} attaque {closest_target.__class__.__name__} !")
-                    # Appeler l'animation d'attaque avec le son
-                    enemy.draw_enemy_attack(self, closest_target)
-                    # Infliger des dégâts
-                    closest_target.take_damage(enemy.attack_power, "melee")  # Appliquer des dégâts de type "melee"
-                    if closest_target.health <= 0:
-                        print(f"{closest_target.__class__.__name__} est mort. Retiré des unités du joueur.")
-                        self.player_units.remove(closest_target)
-
-            else:
-                print(f"{enemy.__class__.__name__} n'a trouvé aucune cible.")
+            # Étape 1 : Trouver la cible prioritaire
+            #target = self.find_high_priority_target(enemy)
+            target= self.find_closest_target(enemy)
+            if not target:
+                print(f"{enemy.__class__.__name__} n'a trouvé aucune cible valide.")
                 continue
-       
-        # Étape 4: Vérifier si l'ennemi entre dans une zone de bombe
-        self.handle_bomb_zones(enemy)
 
-      # Étape 5: Si toujours en vie, attaquer la cible
-        if enemy in self.enemy_units and self.is_target_in_range(enemy, closest_target):
-            print(f"{enemy.__class__.__name__} attaque {closest_target.__class__.__name__} à ({closest_target.x}, {closest_target.y}) !")
-            enemy.attack(closest_target)
-            if closest_target.health <= 0:
-                print(f"{closest_target.__class__.__name__} est mort. Retiré des unités du joueur.")
-                self.player_units.remove(closest_target)
+            print(f"{enemy.__class__.__name__} cible {target.__class__.__name__} à ({target.x}, {target.y}).")
 
-        self.check_victory()  # 检查胜负条件 / # Vérifiez les conditions gagnantes et perdantes
+            # Étape 2 : Déplacer l'ennemi vers la cible
+            moved = self.move_enemy_towards_target(enemy, target)
+            if moved:
+                print(f"{enemy.__class__.__name__} s'est déplacé vers ({enemy.x}, {enemy.y}).")
+            else:
+                print(f"{enemy.__class__.__name__} ne peut pas se déplacer vers {target.__class__.__name__}.")
+
+            # Étape 3 : Vérifier si l'ennemi peut attaquer après s'être déplacé
+            if self.is_target_in_range(enemy, target):
+                print(f"{enemy.__class__.__name__} attaque {target.__class__.__name__} à ({target.x}, {target.y}).")
+                enemy.draw_enemy_attack(self, target)
+                target.take_damage(enemy.attack_power, "melee")
+                if target.health <= 0:
+                    print(f"{target.__class__.__name__} est mort. Retiré des unités du joueur.")
+                    self.player_units.remove(target)
+
+            # Étape 4 : Vérifier les effets des terrains ou bonus
+            self.handle_bomb_zones(enemy)
+
+        # Vérifier les conditions de victoire après le tour des ennemis
+        self.check_victory()
+
+    def move_enemy_towards_target(self, enemy, target):
+        """Déplace un ennemi vers une cible spécifiée."""
+        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        directions.sort(key=lambda d: abs((enemy.x + d[0]) - target.x) + abs((enemy.y + d[1]) - target.y))
+
+        for dx, dy in directions:
+            new_x, new_y = enemy.x + dx, enemy.y + dy
+
+            # Vérifier les limites de la grille
+            if not (0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE):
+                continue
+
+            # Vérifier le type de terrain
+            terrain_type = self.terrain[new_x][new_y]["type"]
+            if terrain_type in ["wall", "lava"]:
+                continue
+
+            # Vérifier si la case est occupée
+            if any(unit.x == new_x and unit.y == new_y for unit in self.player_units + self.enemy_units):
+                continue
+
+            # Déplacer l'ennemi
+            enemy.x, enemy.y = new_x, new_y
+            return True
+
+        return False
+
+    def is_target_in_range(self, enemy, target):
+        """Vérifie si une cible est à portée d'attaque."""
+        attack_range = getattr(enemy, "attack_range", 1)  # Par défaut : 1
+        return abs(enemy.x - target.x) + abs(enemy.y - target.y) <= attack_range
+
+    def handle_enemy_reaction(self, player_unit):
+        """Déclenche un déplacement ennemi après une action du joueur."""
+        for enemy in self.enemy_units:
+            if enemy.health > 0:
+                target = player_unit  # Réagit à l'unité qui vient de jouer
+                moved = self.move_enemy_towards_target(enemy, target)
+                if moved:
+                    print(f"{enemy.__class__.__name__} réagit en se déplaçant vers ({enemy.x}, {enemy.y}).")
+
+                    # Vérifier si l'ennemi peut attaquer après le déplacement
+                    if self.is_target_in_range(enemy, target):
+                        print(f"{enemy.__class__.__name__} attaque {target.__class__.__name__} !")
+                        #enemy.attack(target)
+                        enemy.draw_enemy_attack(self, target)
+                    return  # Stopper après une action
+
 
     def find_closest_target(self, enemy):
         """Trouve la cible la plus proche parmi les unités ennemies ou alliées."""
@@ -529,49 +650,6 @@ class Game:
             print(f"{enemy.__class__.__name__} ne trouve aucune cible valide.")
         return closest_target
     
-    def move_enemy_towards_target(self, enemy, target, game):
-        """
-        Déplace un ennemi vers une case adjacente à la cible (joueur), et s'arrête avant d'entrer sur la même case.
-        """
-        if target is None:
-            print(f"{enemy.__class__.__name__} n'a pas de cible valide.")
-            return False  # Aucun objectif à atteindre
-
-        # Directions possibles : haut, bas, gauche, droite
-        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-        random.shuffle(directions)  # Mélange pour ajouter un peu d'aléatoire
-
-        for dx, dy in directions:
-            new_x, new_y = enemy.x + dx, enemy.y + dy
-             # Vérifiez que la nouvelle position est dans les limites
-            if not (0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE):
-                continue
-            
-            # Vérifiez que la case est une case adjacente au joueur (évite d'entrer sur la même case)
-            if abs(new_x - target.x) + abs(new_y - target.y) != 1:
-                continue
-
-            # Vérifiez le type de terrain
-            terrain_type = game.terrain[new_x][new_y]["type"]
-            if terrain_type == "wall":
-                continue  # Ne traverse pas les mur
-
-            if terrain_type == "water" and enemy.team == "enemy":
-                print(f"{enemy.__class__.__name__} traverse l'eau pour atteindre {target.__class__.__name__}.")
-                enemy.health -= 3  # Applique des dégâts pour traverser l'eau
-                print(f"{enemy.__class__.__name__} a maintenant {enemy.health} PV.")
-
-            # Vérifiez que la case n'est pas occupée
-            if any(unit.x == new_x and unit.y == new_y for unit in game.player_units + game.enemy_units):
-                continue
-
-            # Déplacer l'ennemi vers la nouvelle case
-            enemy.x, enemy.y = new_x, new_y
-            print(f"{enemy.__class__.__name__} s'est déplacé vers ({enemy.x}, {enemy.y}) pour atteindre {target.__class__.__name__}.")
-            return True
-
-        print(f"{enemy.__class__.__name__} ne peut pas se déplacer vers {target.__class__.__name__}.")
-        return False
         
     def handle_medic_heal(self, medic):
         """Fait en sorte qu'un Medic soigne l'unité alliée la plus proche qui a besoin de soin."""
@@ -615,12 +693,12 @@ class Game:
                 terrain = self.terrain[x][y]
                 self.screen.blit(terrain["image"], (x * CELL_SIZE, y * CELL_SIZE))
 
-        # 绘制己方单位
+        # Afficher les unités du joueur
         for unit in self.player_units:
-            if unit.health > 0:  # 仅绘制健康单位
+            if unit.health > 0 and getattr(unit, "visible", True):  # Vérifie si l'unité est visible
                 unit.draw(self.screen,self)
 
-        # 获取玩家合并视野
+       # Afficher les ennemis (en fonction de la vision combinée)
         combined_vision = self.get_combined_vision()
 
         # 绘制敌方单位，仅绘制在视野内的敌方单位
@@ -639,11 +717,74 @@ class Game:
         # Dessiner les bombes
         for x, y in self.bomb_zones:
             self.screen.blit(self.bomb_image, (x * CELL_SIZE, y * CELL_SIZE))
-
+        # Dessiner les bonus
+        for item in self.bonus_items:
+            self.screen.blit(item.image, (item.x * CELL_SIZE, item.y * CELL_SIZE))
+        #Afficher le panneau des unités
+        self.draw_unit_info_panel()
 
         pygame.display.flip()
-    
+ 
+
+    def pause_menu(self):
+        """Afficher le menu de pause avec une image d'arrière-plan."""
+        # Charger l'image d'arrière-plan
+        bg_image = pygame.image.load("pic/pause_bg.jpg")  # Assurez-vous que le chemin est correct
+        bg_image = pygame.transform.scale(bg_image, (WIDTH, HEIGHT))
+
+        # Configuration des polices pour le titre et les options
+        font_title = pygame.font.Font(None, 72)
+        font_option = pygame.font.Font(None, 48)
+
+        # Texte du titre "Pause"
+        paused_text = font_title.render("Jeu en pause", True, (255, 255, 255))
+        paused_rect = paused_text.get_rect(center=(WIDTH // 2, HEIGHT // 4))
+
+        # Options du menu pause
+        options = ["Resume", "Menu Principal", "Quit"]
+        option_rects = []
+        for i, option in enumerate(options):
+            option_text = font_option.render(option, True, (255, 255, 255))
+            option_rect = option_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 + i * 60))
+            option_rects.append((option_text, option_rect))
+
+        paused = True
+        while paused:
+            # Afficher l'image d'arrière-plan
+            self.screen.blit(bg_image, (0, 0))
+
+            # Afficher le texte et les options
+            self.screen.blit(paused_text, paused_rect)
+            for option_text, option_rect in option_rects:
+                self.screen.blit(option_text, option_rect)
+            pygame.display.flip()
+
+            # Gestion des interactions utilisateur
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:  # Quitter le jeu
+                    pygame.quit()
+                    exit()
+                elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:  # Reprendre
+                    paused = False
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Clic gauche
+                    mouse_pos = event.pos
+                    for i, (_, option_rect) in enumerate(option_rects):
+                        if option_rect.collidepoint(mouse_pos):
+                            if i == 0:  # Resume
+                                paused = False
+                            elif i == 1:  # Menu Principal
+                                self.return_to_main_menu()
+                                return
+                            elif i == 2:  # Quit
+                                pygame.quit()
+                                exit()
+        
+
+
+
+
     def show_menu(self):
+        print("Menu principal affiché.")
         """Afficher le menu principal du jeu."""
         bg_image = pygame.image.load("pic/bg.jpg")
         bg_image = pygame.transform.scale(bg_image, (WIDTH, HEIGHT))
@@ -686,17 +827,29 @@ class Game:
 
             pygame.display.flip()
 
-
+        
     # quand je vais choisir un jouer mode one player pouvoir jouer avec un seule 
+     
     def set_active_unit(self):
-        """Définir l'unité active en fonction des paramètres sélectionnés."""
+        """Définir l'unité active en fonction du mode et de l'unité sélectionnée."""
         if self.selected_mode == "One Player":
             for unit in self.player_units:
                 if unit.__class__.__name__ == self.selected_unit:
                     self.active_unit = unit
                     break
+            # Masquer les autres unités
+            for unit in self.player_units:
+                unit.visible = (unit == self.active_unit)
         else:
-            self.active_unit = None  # Aucune unité active, toutes sont jouables.     
+            # Si le mode est Group, toutes les unités sont visibles
+            self.active_unit = None
+            for unit in self.player_units:
+                unit.visible = True
+
+
+
+
+
 
     def show_settings(self):
         """Afficher le menu des paramètres permettant de sélectionner le mode et l'unité."""
@@ -745,27 +898,124 @@ class Game:
 
 
     def check_victory(self):
-        """检查胜负条件 / Vérifiez les conditions gagnantes et perdantes """
+        """Vérifiez les conditions gagnantes et perdantes."""
+        # Victoire
         if all(unit.health <= 0 for unit in self.enemy_units):
-            self.display_message("Victoire")  # 显示胜利信息 /Afficher les informations de victoire
+            print("Victoire détectée !")
+            self.display_message("Victoire !")
             pygame.time.delay(2000)
-            pygame.quit()
-            exit()
-        elif all(unit.health <= 0 for unit in self.player_units):
-            self.display_message("Échouer")  # 显示失败信息 /Afficher le message d'échec
+            self.return_to_main_menu()
+            return
+
+        # Défaite en mode Group
+        if self.selected_mode == "Group" and all(unit.health <= 0 for unit in self.player_units):
+            print("Game Over détecté en mode Group !")
+            self.display_message("Game Over - Tous vos joueurs sont morts.")
             pygame.time.delay(2000)
-            pygame.quit()
-            exit()
+            self.return_to_main_menu()
+            return
+
+        # Défaite en mode One Player
+        if self.selected_mode == "One Player" and self.active_unit and self.active_unit.health <= 0:
+            print("Game Over détecté en mode One Player !")
+            self.display_message("Game Over - Vous avez perdu.")
+            pygame.time.delay(2000)
+            self.return_to_main_menu()
+            return
+        
+    # cette fonction pour pouvoir recommancer a nouveau ou  cas ou on a perdu la partie on peu directement commancer une nouvelle sans quitter le jeu a chaque fois et reentrer dans jeu 
+
+    def return_to_main_menu(self):
+        """Réinitialiser le jeu et revenir au menu principal."""
+        print("Retour au menu principal avec réinitialisation...")
+
+        # Réinitialiser les attributs du jeu
+        self.__init__(self.screen)  # Réinitialiser toutes les configurations
+
+        # Réinitialiser les sélections
+        self.selected_mode = "One Player"
+        self.selected_unit = "Pyro"
+        self.active_unit = None
+
+        # Afficher le menu principal
+        self.show_menu()
+
+    def draw_unit_info_panel(self):
+            """Affiche les informations des unités dans un panneau à droite de la zone de jeu."""
+            panel_width = 250  # Largeur du panneau
+            panel_x = WIDTH  # Position à droite de la grille
+            font = pygame.font.Font(None, 28)  # Réduire la taille de la police
+            padding = 10  # Espace intérieur pour le contenu
+            unit_image_size = 40  # Taille des images des unités
+
+            # Dessiner le panneau de fond
+            pygame.draw.rect(self.screen, (50, 50, 50), (panel_x, 0, panel_width, HEIGHT))  # Fond gris foncé
+            pygame.draw.rect(self.screen, (255, 255, 255), (panel_x, 0, panel_width, HEIGHT), 2)  # Bordure blanche
+
+            if self.selected_mode == "Group":
+                # Mode Group : Afficher toutes les unités
+                y_offset = padding  # Position verticale de départ
+                for unit in self.player_units:
+                    # Afficher le nom de l'unité
+                    name_text = font.render(unit.__class__.__name__, True, (255, 255, 0))  # Nom en jaune
+                    self.screen.blit(name_text, (panel_x + padding, y_offset))
+
+                    # Afficher l'image de l'unité
+                    if unit.image:
+                        unit_image = pygame.transform.scale(unit.image, (unit_image_size, unit_image_size))
+                        self.screen.blit(unit_image, (panel_x + padding, y_offset + 30))
+
+                    # Afficher les statistiques
+                    stats = [
+                        f"Health: {unit.health}",
+                        f"Attack: {unit.attack_power}",
+                        f"Defense: {unit.defense}"
+                    ]
+                    for i, stat in enumerate(stats):
+                        stat_text = font.render(stat, True, (255, 255, 255))
+                        self.screen.blit(stat_text, (panel_x + padding + unit_image_size + 10, y_offset + 30 + i * 25))
+
+                    # Ajouter un espace entre les unités
+                    y_offset += 100
+
+            elif self.selected_mode == "One Player" and self.active_unit:
+                # Mode One Player : Afficher une seule unité
+                y_offset = padding  # Position verticale de départ
+                unit = self.active_unit
+
+                # Afficher le nom de l'unité
+                name_text = font.render(unit.__class__.__name__, True, (255, 255, 0))  # Nom en jaune
+                self.screen.blit(name_text, (panel_x + padding, y_offset))
+
+                # Afficher l'image de l'unité
+                if unit.image:
+                    unit_image = pygame.transform.scale(unit.image, (unit_image_size, unit_image_size))
+                    self.screen.blit(unit_image, (panel_x + padding, y_offset + 30))
+
+                # Afficher les statistiques
+                stats = [
+                    f"Health: {unit.health}",
+                    f"Attack: {unit.attack_power}",
+                    f"Defense: {unit.defense}"
+                ]
+                for i, stat in enumerate(stats):
+                    stat_text = font.render(stat, True, (255, 255, 255))
+                    self.screen.blit(stat_text, (panel_x + padding + unit_image_size + 10, y_offset + 30 + i * 25))
+
+
+
+
+
 
     def display_message(self, message):
-        """在屏幕中央显示信息"""
+        """Afficher un message temporaire au centre de l'écran."""
         font = pygame.font.Font(None, 64)
-        text_surface = font.render(message, True, (255, 255, 255))  # 白色文本
+        text_surface = font.render(message, True, (255, 255, 255))  # Texte en blanc
         text_rect = text_surface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
         self.screen.blit(text_surface, text_rect)
         pygame.display.flip()
-
-
+        pygame.time.delay(2000)  # Afficher pendant 2 secondes
+ 
 def show_loading_screen(screen):
     """Afficher une barre de chargement avec un arrière-plan et une progression lente/rapide."""
     font_large = pygame.font.Font(None, 60)  # Police pour "Loading..."
@@ -818,6 +1068,17 @@ def show_loading_screen(screen):
     pygame.display.flip()
 
 
+
+
+    
+
+
+
+
+
+
+
+
 def main():
     pygame.init()
 
@@ -833,8 +1094,8 @@ def main():
 
     # 初始化窗口
     #Initialiser la fenêtre
-    screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("Mon jeu de python")
+    screen = pygame.display.set_mode((WIDTH+250, HEIGHT))
+    pygame.display.set_caption("Mon jeu avec panneau d'informations")
 
 
      # Afficher l'écran de chargement

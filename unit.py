@@ -1,8 +1,9 @@
 import pygame
 import random
-
+from bonus import BonusItem  # Import des bonus
 # Constantes
-GRID_SIZE = 10
+
+GRID_SIZE = 16
 CELL_SIZE = 60
 WIDTH = GRID_SIZE * CELL_SIZE
 HEIGHT = GRID_SIZE * CELL_SIZE
@@ -60,7 +61,7 @@ class Unit:
         在网格上绘制单位。
     """
 
-    def __init__(self, x, y, health, attack_power,defense, team):
+    def __init__(self, x, y, health, attack_power,defense, team,accuracy=0.8, evasion=0.2, crit_chance=0.1,speed=1):
         """
         Construit une unité avec une position, une santé, une puissance d'attaque et une équipe.
         创建一个单位，指定位置、生命值、攻击力和队伍。
@@ -93,10 +94,21 @@ class Unit:
         self.is_selected = False
         self.image = None  # picture init null  默认图片为空
         self.is_hidden = False # L'unité est-elle cachée/invisible ?
-        #imane
+        self.speed = speed  # Nombre de cases que l'unité peut parcourir par tour
         # Ajout des faiblesses et résistances
         self.weakness = []  # Liste des types ou éléments faibles
         self.resistance = []  # Liste des types ou éléments résistants
+        self.actions_left = 1  # Par défaut, chaque unité peut agir une fois par tour
+        self.image = self.load_image()  # Charger l'image de l'unité
+        self.visible = True  # Par défaut, toutes les unités sont visibles
+
+        #nouvelle statistique
+   
+        self.accuracy= accuracy #probabilter de toucher la cible 
+        self.evasion= evasion #probabi de esquiver  pour eviter l'attaque 
+        self.crit_chance= crit_chance #PROB DU COUP CRITIQUE ;prob de faire des degats critique (multiples_)
+
+
 
     def take_damage(self, damage, attack_type):
         """
@@ -117,7 +129,18 @@ class Unit:
         print(f"{self.__class__.__name__} a maintenant {self.health} PV.")
 
 
-
+    def load_image(self):
+        """Charge l'image de l'unité en fonction de son nom."""
+        try:
+            image_path = f"pic/{self.__class__.__name__}.png"  # Exemple : pic/Pyro.png
+            image = pygame.image.load(image_path)
+            return pygame.transform.scale(image, (CELL_SIZE, CELL_SIZE))  # Adapter à la taille de la grille
+        except FileNotFoundError:
+            print(f"Image non trouvée pour {self.__class__.__name__}. Utilisation d'une image par défaut.")
+            # Créer une surface colorée comme fallback
+            default_image = pygame.Surface((CELL_SIZE, CELL_SIZE))
+            default_image.fill((100, 100, 100))  # Gris par défaut
+            return default_image
     def move(self, dx, dy, game):
         if self.health <= 0:
             print(f"{self.__class__.__name__} 0 santé, incapable de bouger !")
@@ -131,9 +154,9 @@ class Unit:
             print("Position hors limites.")
             return False
 
-        # Vérifiez si la cible est dans la plage de mouvement
-        if abs(dx) + abs(dy) > self.move_range:
-            print(f"{self.__class__.__name__} Impossible de se déplacer vers un endroit hors de portée！")
+         # Vérifiez si la cible est dans la plage de déplacement en fonction de la vitesse
+        if abs(dx) + abs(dy) > self.speed:
+            print(f"{self.__class__.__name__} ne peut pas se déplacer aussi loin (vitesse max : {self.speed}).")
             return False
 
         # Vérifiez si la case cible est déjà occupée
@@ -154,7 +177,7 @@ class Unit:
             print(f"{self.__class__.__name__} ne peut pas traverser {terrain_type}.")
             return False
 
-        #imane
+       
         if terrain_type == "water":
             if self.team == "enemy":
                 print(f"{self.__class__.__name__} traverse l'eau et subit des dégâts !")
@@ -163,13 +186,20 @@ class Unit:
             else:
                 print(f"{self.__class__.__name__} (joueur) ne peut pas traverser l'eau.")
                 return False
-
-        #imane
+        
+        
 
         # Déplacer vers un nouvel emplacement
         self.x, self.y = new_x, new_y
         #print(f"{self.__class__.__name__} s'est déplacé vers ({self.x}, {self.y}).")
-    
+         
+         # Ramasser les objets bonus
+           # Si le mouvement est valide :
+        self.x, self.y = new_x, new_y
+        self.actions_left -= 1  # Réduire le nombre d'actions restantes
+        game.handle_bonus_items(self)  # Vérifie si l'unité a ramassé un bonus
+       
+
         # Mettre à jour le statut invisible
         self.is_hidden = terrain_type == "tree" and isinstance(self, (Sniper, Scout))
 
@@ -273,18 +303,42 @@ class Unit:
         if self.is_hidden:
           print(f"{self.__class__.__name__} Impossible d'attaquer en étant invisible !")  # "L'unité en mode furtif ne peut pas attaquer !"
           return  # La méthode s'arrête ici, l'attaque n'a pas lieu
-
-     # Si la défense de la cible est différente de zéro, on calcule les dégâts
+        
+        #calcul de la precision 
+        if random.random()>self.accuracy:
+            print(f"{self.__class__.__name__} a raté son attaque contre {target.__class__.__name__}!")
+            return
+        #calcul de l"esquive
+        if random.random() < target.evasion:
+            print(f"{target.__class__.__name__} a esquivé l'attaque de {self.__class__.__name__} !")
+            return
+         # Calcul des dégâts de base   
+         # Si la défense de la cible est différente de zéro, on calcule les dégâts
         if target.defense != 0:
          # Les dégâts sont la différence entre la puissance d'attaque de l'unité et la défense de la cible
           damage = max(self.attack_power - target.defense, 0)  # Les dégâts ne peuvent pas être inférieurs à 0
         else:
         # Si la cible n'a pas de défense, les dégâts sont augmentés de 20%
          damage = self.attack_power * 1.2  # Les dégâts sont augmentés de 20%
-  
+        
+
+        # Calcul des dégâts critiques
+        if random.random() < self.crit_chance:
+            damage *= 2  # Multiplie les dégâts par 2
+            print(f"COUP CRITIQUE ! {self.__class__.__name__} inflige {damage} dégâts à {target.__class__.__name__} !")
+        else:
+            print(f"{self.__class__.__name__} inflige {damage} dégâts à {target.__class__.__name__}.")
+
         # On applique les dégâts à la cible en réduisant sa santé
         target.health -= damage
-   
+        print(f"{target.__class__.__name__} a maintenant {target.health} PV.")
+
+        # Vérifie si la cible est morte
+        if target.health <= 0:
+            print(f"{target.__class__.__name__} est mort.")
+        
+        # Lancer l'animation et le son de l'attaque
+        #self.draw_enemy_attack(self.game, target)
 
     def draw(self, screen,game=None):
         """Affiche l'unité sur l'écran.
@@ -360,22 +414,21 @@ class Unit:
         pygame.draw.rect(screen, (0, 0, 255), (defense_bar_x, defense_bar_y, defense_bar_width * defense_ratio, defense_bar_height))  # 当前防御值
     
     def draw_move_range(self, screen, game):
-        """绘制移动范围，考虑水面阻碍"""
         surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         blue = (0, 0, 255, 50)
 
-        for dx in range(-self.move_range, self.move_range + 1):
-            for dy in range(-self.move_range, self.move_range + 1):
+        for dx in range(-self.speed, self.speed + 1):
+            for dy in range(-self.speed, self.speed + 1):
                 new_x, new_y = self.x + dx, self.y + dy
-                if 0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE and abs(dx) + abs(dy) <= self.move_range:
+                if 0 <= new_x < GRID_SIZE and 0 <= new_y < GRID_SIZE and abs(dx) + abs(dy) <= self.speed:
                     terrain_type = game.terrain[new_x][new_y]["type"]
                     if terrain_type == "water" and isinstance(self, (Sniper, Scout)):
-                        continue  # 水面阻碍
+                        continue  # Empêche les déplacements impossibles
                     rect = pygame.Rect(new_x * CELL_SIZE, new_y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
                     pygame.draw.rect(surface, blue, rect)
 
         screen.blit(surface, (0, 0))
-    
+
 
     def get_vision(self):
         """计算单位的视野范围"""
@@ -390,9 +443,9 @@ class Unit:
 
 #Les rôles héritent de la classe Unit
 class Pyro(Unit):
-    def __init__(self, x, y, team):
-        super().__init__(x, y, health=20, attack_power=3,defense = 5, team=team)
-        
+    def __init__(self, x, y, team, game=None):
+        super().__init__(x, y, health=20, attack_power=3,defense = 5, team=team,speed=1)
+        self.game= game
         self.move_range = 1
         self.image = pygame.image.load("pic/Pyro.webp")
         self.image = pygame.transform.scale(self.image, (CELL_SIZE, CELL_SIZE))
@@ -402,41 +455,58 @@ class Pyro(Unit):
 
     
     def handle_single_attack(self, game):
-        """Compétence de modification du terrain"""
-        """改变地形技能"""
+        """Compétence de modification du terrain avec gestion des erreurs"""
         surrounding_positions = [
-            (self.x - 1, self.y),
-            (self.x + 1, self.y),
-            (self.x, self.y - 1),
-            (self.x, self.y + 1),
-        ]
-        # Dessiner la portée de la compétence
-        # 绘制技能范围
+        (self.x + dx, self.y + dy)
+        for dx in range(-1, 2)
+        for dy in range(-1, 2)
+        if 0 <= self.x + dx < GRID_SIZE and 0 <= self.y + dy < GRID_SIZE
+    ]  
+        print(f"Positions valides pour l'attaque : {surrounding_positions}")
         game.draw_skill_range(surrounding_positions)
 
         running = True
         while running:
             for event in pygame.event.get():
-                 # Clic gauche pour choisir la cible
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # 左键点击选择目标
-                    mouse_x, mouse_y = event.pos
-                    grid_x, grid_y = mouse_x // CELL_SIZE, mouse_y // CELL_SIZE
-                    if (grid_x, grid_y) in surrounding_positions:
-                        game.terrain[grid_x][grid_y] = {
-                            "type": "lava",
-                            "image": game.terrain_images["lava"],
-                        }
-                        #debut modi
-                        # Inflige des dégâts aux unités dans la zone ciblée
-                        for unit in game.player_units + game.enemy_units:
-                            if (unit.x, unit.y) == (grid_x, grid_y):
-                                unit.take_damage(10, "fire")  # Appel à take_damage
-                                print(f"{unit.__class__.__name__} a été touché par la lave ! Vie restante：{unit.health}")
-                        #fin modi
+                try:
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        exit()
+
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Clic gauche
+                        mouse_x, mouse_y = event.pos
+                        grid_x, grid_y = mouse_x // CELL_SIZE, mouse_y // CELL_SIZE
+                        print(f"Clic détecté : ({grid_x}, {grid_y})")
+
+                        # Vérifiez si la cible est dans la portée
+                        if (grid_x, grid_y) in surrounding_positions:
+                            # Vérifiez si la case est valide
+                            if grid_x < 0 or grid_y < 0 or grid_x >= GRID_SIZE or grid_y >= GRID_SIZE:
+                                print("Position hors limites !")
+                                continue
+
+                            # Modifiez le terrain
+                            print(f"Modification du terrain en lave à ({grid_x}, {grid_y})")
+                            game.terrain[grid_x][grid_y] = {
+                                "type": "lava",
+                                "image": game.terrain_images["lava"],
+                            }
+
+                            # Infligez des dégâts aux unités dans la zone
+                            for unit in game.player_units + game.enemy_units:
+                                if (unit.x, unit.y) == (grid_x, grid_y):
+                                    print(f"Unité détectée : {unit.__class__.__name__} à ({unit.x}, {unit.y})")
+                                    unit.take_damage(10, "fire")
+                                    print(f"{unit.__class__.__name__} touché par la lave ! Santé restante : {unit.health}")
+                            running = False
+                        else:
+                            print("Position hors de portée.")
+                    
+                    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                        print("Attaque annulée.")
                         running = False
-                elif event.type == pygame.QUIT:
-                    pygame.quit()
-                    exit()
+                except Exception as e:
+                    print(f"Erreur détectée : {e}")
 
 
 
@@ -449,19 +519,25 @@ class Pyro(Unit):
             for dy in range(-3, 4)
             if 0 <= self.x + dx < GRID_SIZE and 0 <= self.y + dy < GRID_SIZE and dx**2 + dy**2 <= 4
         ]
+        print(f"affected_positions : {affected_positions}")
+        game.draw_skill_range(affected_positions)
         # Infliger des dégâts à toutes les unités dans la zone d'effet
         for unit in game.player_units + game.enemy_units:
-            if (unit.x, unit.y) in affected_positions:
-                unit.take_damage(8, "fire")  # Appel à take_damage avec type "fire"
-                #unit.health -= 5
-                print(f"{unit.__class__.__name__} a été blessé par l'attaque de groupe ! Vie restante：{unit.health}")
-
+            if hasattr(unit, 'take_damage') and (unit.x, unit.y) in affected_positions:
+                try:
+                    unit.take_damage(8, "fire")  # Appel à take_damage avec type "fire"
+                    #unit.health -= 5
+                    print(f"{unit.__class__.__name__} a été blessé par l'attaque de groupe ! Vie restante：{unit.health}")
+                except Exception as e:
+                        print(f"Erreur lors de l'application des dégâts : {e}")
+            else:
+                    print(f"Unité invalide ou hors portée : {unit}")
         # Dessiner l'effet d'explosion
-       
+    
         self.draw_explosion_effect(game, affected_positions)
 
     def draw_explosion_effect(self, game, positions):
-         # Dessiner l'effet d'explosion
+        # Dessiner l'effet d'explosion
         """绘制爆炸效果"""
         explosion_image = pygame.image.load("pic/explosion.png")
         explosion_image = pygame.transform.scale(explosion_image, (CELL_SIZE, CELL_SIZE))
@@ -491,117 +567,117 @@ class Pyro(Unit):
 
 
 class Medic(Unit):
-    def __init__(self, x, y, team):
-        super().__init__(x, y, health=15, attack_power=2,defense = 4, team=team)
+        def __init__(self, x, y, team, game=None):
+            super().__init__(x, y, health=15, attack_power=2,defense = 4, team=team,speed=2)
+            self.game=game
+            self.move_range = 2
+            self.image = pygame.image.load("pic/Medic.webp")
+            self.image = pygame.transform.scale(self.image, (CELL_SIZE, CELL_SIZE))
+            self.weakness = ["melee"]  # Faible contre les attaques au corps à corps
+            self.resistance = ["poison"]  # Résistant aux effets de poison
+
+        def handle_single_attack(self, game):
+            """单一攻击技能，向不超过3格的敌人发射子弹"""
+            """Compétence d'attaque unique, tirer des balles sur un ennemi dans un rayon de 3 cases"""
+
+            valid_targets = [
+                enemy for enemy in game.enemy_units
+                if abs(enemy.x - self.x) + abs(enemy.y - self.y) <= 3
+            ]
+
+            if not valid_targets:
+                print(" Aucune cible dans la portée de l'attaque !")
+                return
+
+            # 绘制攻击范围
+            game.draw_skill_range([(enemy.x, enemy.y) for enemy in valid_targets])
+
+            running = True
+            while running:
+                for event in pygame.event.get():
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # 左键点击选择目标
+                        mouse_x, mouse_y = event.pos
+                        grid_x, grid_y = mouse_x // CELL_SIZE, mouse_y // CELL_SIZE
+                        for enemy in valid_targets:
+                            if (enemy.x, enemy.y) == (grid_x, grid_y):
+                                self.draw_bullet(game, enemy)
+                                #enemy.health -= 5
+                                enemy.take_damage(5, "ranged")
+                                print(f"{enemy.__class__.__name__}  a été touché par l'attaque unique de Medic ! Vie restante：{enemy.health}")
+                                running = False
+                                break
+                    elif event.type == pygame.QUIT:
+                        pygame.quit()
+                        exit()
+
+        def handle_group_attack(self, game):
+            """群体攻击技能，治疗半径为2格的己方单位"""
+            """
+                Compétence de groupe : soigner les unités alliées dans un rayon de 2 cases.
+                Les unités les plus blessées sont soignées en priorité.
+            """
+            affected_positions = [
+                (self.x + dx, self.y + dy)
+                for dx in range(-2, 3)
+                for dy in range(-2, 3)
+                if 0 <= self.x + dx < GRID_SIZE and 0 <= self.y + dy < GRID_SIZE and dx**2 + dy**2 <= 4
+            ]
+
+            # Étape 2 : Trouver toutes les unités alliées dans cette zone d'effet
+            allies_in_range = [
+                unit for unit in game.player_units if (unit.x, unit.y) in affected_positions
+            ]
+
+            # Étape 3 : Trier les unités par ordre croissant de santé pour soigner les plus blessées en premier
+            allies_in_range.sort(key=lambda unit: unit.health)
+
+            # Étape 4 : Appliquer le soin
+            # Les unités avec moins de 50% de leur santé reçoivent un soin plus important
+            for unit in allies_in_range:
+                if unit.health <= 10:  # Seuil pour considérer une unité comme "celle qui est grv blessée"
+                    heal_amount = 5  # Soins importants pour les unités gravement blessées
+                else:
+                    heal_amount = 3  # Soins normaux pour les autres unités 
+
+                # Augmente la santé de l'unité, sans dépasser le maximum de santé (20)
+                max_health = 20
+                unit.health = min(unit.health + heal_amount, 20)
+
+                # Affiche un message pour indiquer quel allié a été soigné
+                print(f"{unit.__class__.__name__} a été soigné par le Medic ! Santé actuelle : {unit.health}")
+
+            # Étape 5 : Dessiner l'effet de soin pour les unités soignées
+            self.draw_healing_effect(game, [(unit.x, unit.y) for unit in allies_in_range])
+
         
-        self.move_range = 2
-        self.image = pygame.image.load("pic/Medic.webp")
-        self.image = pygame.transform.scale(self.image, (CELL_SIZE, CELL_SIZE))
-        self.weakness = ["melee"]  # Faible contre les attaques au corps à corps
-        self.resistance = ["poison"]  # Résistant aux effets de poison
 
-    def handle_single_attack(self, game):
-        """单一攻击技能，向不超过3格的敌人发射子弹"""
-        """Compétence d'attaque unique, tirer des balles sur un ennemi dans un rayon de 3 cases"""
+        def draw_healing_effect(self, game, positions):
+            """Dessiner l'effet de soin"""
+            """绘制治疗效果"""
+            healing_color = (0, 255, 0, 150)  # 半透明绿色 # Vert semi-transparent
+            surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
 
-        valid_targets = [
-            enemy for enemy in game.enemy_units
-            if abs(enemy.x - self.x) + abs(enemy.y - self.y) <= 3
-        ]
+            for x, y in positions:
+                rect = pygame.Rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+                pygame.draw.rect(surface, healing_color, rect)
 
-        if not valid_targets:
-            print(" Aucune cible dans la portée de l'attaque !")
-            return
-
-        # 绘制攻击范围
-        game.draw_skill_range([(enemy.x, enemy.y) for enemy in valid_targets])
-
-        running = True
-        while running:
-            for event in pygame.event.get():
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # 左键点击选择目标
-                    mouse_x, mouse_y = event.pos
-                    grid_x, grid_y = mouse_x // CELL_SIZE, mouse_y // CELL_SIZE
-                    for enemy in valid_targets:
-                        if (enemy.x, enemy.y) == (grid_x, grid_y):
-                            self.draw_bullet(game, enemy)
-                            #enemy.health -= 5
-                            enemy.take_damage(5, "ranged")
-                            print(f"{enemy.__class__.__name__}  a été touché par l'attaque unique de Medic ! Vie restante：{enemy.health}")
-                            running = False
-                            break
-                elif event.type == pygame.QUIT:
-                    pygame.quit()
-                    exit()
-
-    def handle_group_attack(self, game):
-        """群体攻击技能，治疗半径为2格的己方单位"""
-        """
-            Compétence de groupe : soigner les unités alliées dans un rayon de 2 cases.
-            Les unités les plus blessées sont soignées en priorité.
-        """
-        affected_positions = [
-            (self.x + dx, self.y + dy)
-            for dx in range(-2, 3)
-            for dy in range(-2, 3)
-            if 0 <= self.x + dx < GRID_SIZE and 0 <= self.y + dy < GRID_SIZE and dx**2 + dy**2 <= 4
-        ]
-
-        # Étape 2 : Trouver toutes les unités alliées dans cette zone d'effet
-        allies_in_range = [
-            unit for unit in game.player_units if (unit.x, unit.y) in affected_positions
-        ]
-
-        # Étape 3 : Trier les unités par ordre croissant de santé pour soigner les plus blessées en premier
-        allies_in_range.sort(key=lambda unit: unit.health)
-
-        # Étape 4 : Appliquer le soin
-        # Les unités avec moins de 50% de leur santé reçoivent un soin plus important
-        for unit in allies_in_range:
-            if unit.health <= 10:  # Seuil pour considérer une unité comme "celle qui est grv blessée"
-                heal_amount = 5  # Soins importants pour les unités gravement blessées
-            else:
-                heal_amount = 3  # Soins normaux pour les autres unités 
-
-            # Augmente la santé de l'unité, sans dépasser le maximum de santé (20)
-            max_health = 20
-            unit.health = min(unit.health + heal_amount, 20)
-
-            # Affiche un message pour indiquer quel allié a été soigné
-            print(f"{unit.__class__.__name__} a été soigné par le Medic ! Santé actuelle : {unit.health}")
-
-        # Étape 5 : Dessiner l'effet de soin pour les unités soignées
-        self.draw_healing_effect(game, [(unit.x, unit.y) for unit in allies_in_range])
-
-    
-
-    def draw_healing_effect(self, game, positions):
-        """Dessiner l'effet de soin"""
-        """绘制治疗效果"""
-        healing_color = (0, 255, 0, 150)  # 半透明绿色 # Vert semi-transparent
-        surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-
-        for x, y in positions:
-            rect = pygame.Rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-            pygame.draw.rect(surface, healing_color, rect)
-
-        for _ in range(10):  # 光效持续 10 帧 # L'effet de guérison dure 10 images
-            game.screen.blit(surface, (0, 0))
-            pygame.display.flip()
-            pygame.time.delay(100)
+            for _ in range(10):  # 光效持续 10 帧 # L'effet de guérison dure 10 images
+                game.screen.blit(surface, (0, 0))
+                pygame.display.flip()
+                pygame.time.delay(100)
 
 
-    def handle_defense(self):
-        """防御技能，给自己增加防御力"""
-        """Compétence de défense, augmenter la défense de soi-même"""
-        self.defense += 3
-        print(f"{self.__class__.__name__}  a utilisé une compétence de défense ! Défense actuelle  ：{self.defense}")
+        def handle_defense(self):
+            """防御技能，给自己增加防御力"""
+            """Compétence de défense, augmenter la défense de soi-même"""
+            self.defense += 3
+            print(f"{self.__class__.__name__}  a utilisé une compétence de défense ! Défense actuelle  ：{self.defense}")
 
 
 class Sniper(Unit):
-    def __init__(self, x, y, team):
-        super().__init__(x, y, health=12, attack_power=5,defense = 3, team=team)
-        
+    def __init__(self, x, y, team, game=None):
+        super().__init__(x, y, health=12, attack_power=5,defense = 3, team=team,speed=3)
+        self.game=game
         self.move_range = 3
         self.image = pygame.image.load("pic/Sniper.webp")
         self.image = pygame.transform.scale(self.image, (CELL_SIZE, CELL_SIZE))
@@ -715,9 +791,9 @@ class Sniper(Unit):
             pygame.time.delay(100)
 
 class Scout(Unit):
-    def __init__(self, x, y, team):
-        super().__init__(x, y, health=12, attack_power=5,defense = 2, team=team)
-        
+    def __init__(self, x, y, team, game=None):
+        super().__init__(x, y, health=12, attack_power=5,defense = 2, team=team,speed=4)
+        self.game=game
         self.move_range = 4
         self.image = pygame.image.load("pic/Scout.webp")
         self.image = pygame.transform.scale(self.image, (CELL_SIZE, CELL_SIZE))
